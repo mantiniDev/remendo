@@ -36,7 +36,7 @@ def upsert_emenda(con, d):
     autor = pick(d, "nomeAutor", "autor", default="")
     vals = dict(
         empenhado=centavos(pick(d, "valorEmpenhado")), liquidado=centavos(pick(d, "valorLiquidado")),
-        pago=centavos(pick(d, "valorPago")), resto_pago=centavos(pick(d, "valorRestoPago")))
+        pago=centavos(pick(d, "valorPago")) + centavos(pick(d, "valorRestoPago")), resto_pago=centavos(pick(d, "valorRestoPago")))
     h = hashlib.sha1(json.dumps(vals, sort_keys=True).encode()).hexdigest()
     antigo = con.execute("SELECT hash FROM emendas WHERE codigo=?", (codigo,)).fetchone()
     con.execute(
