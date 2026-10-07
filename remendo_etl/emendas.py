@@ -1,6 +1,7 @@
 """Carrega emendas e seus documentos (empenho, liquidação, pagamento) do Portal da Transparência."""
 import hashlib, json, os, sys
 from .common import Execucao, agora, centavos, data_iso, db, get_json, norm, pick
+import requests
 
 BASE = "https://api.portaldatransparencia.gov.br/api-de-dados"
 PAUSA = float(os.environ.get("RATE_PAUSA", "0.7"))  # segundos entre chamadas
@@ -16,7 +17,14 @@ def _headers():
 def paginas(caminho, params=None):
     p = 1
     while True:
-        linhas = get_json(f"{BASE}{caminho}", {**(params or {}), "pagina": p}, _headers(), pausa=PAUSA)
+        try:
+            linhas = get_json(f"{BASE}{caminho}", {**(params or {}), "pagina": p}, _headers(), pausa=PAUSA)
+        except requests.HTTPError as e:
+            if p > 1 and e.response is not None and e.response.status_code == 400:
+                print(f"AVISO: HTTP 400 na página {p} de {caminho} {params}; tratando como fim dos dados. "
+                      f"Resposta: {e.response.text[:300]!r}", flush=True)
+                return
+            raise
         if not linhas:
             return
         yield from linhas
@@ -78,7 +86,10 @@ def run(anos, com_documentos=True):
             con.commit()
             print(f"{ano}: {ex.n} lidas acumuladas, {len(mudadas)} novas/alteradas")
             if com_documentos:
-                for i, cod in enumerate(mudadas, 1):
+                pendentes = set(mudadas) | {r["codigo"] for r in con.execute(
+                    "SELECT codigo FROM emendas WHERE ano=? AND empenhado>0 AND NOT EXISTS "
+                    "(SELECT 1 FROM documentos d WHERE d.emenda_codigo=emendas.codigo)", (ano,))}
+                for i, cod in enumerate(pendentes, 1):
                     carregar_documentos(con, cod)
                     if i % 50 == 0:
                         con.commit()

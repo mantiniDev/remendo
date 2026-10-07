@@ -13,11 +13,21 @@ jobs:
         with: { python-version: "3.12" }
       - run: pip install -r requirements.txt
       - name: Restaurar banco
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: remendo.db
           key: remendo-db-${{ github.run_id }}
           restore-keys: remendo-db-
+      - run: python -m remendo_etl.run --anos 2024
+        timeout-minutes: 330
+        env:
+          PORTAL_API_KEY: ${{ secrets.PORTAL_API_KEY }}
+      - name: Salvar banco
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: remendo.db
+          key: remendo-db-${{ github.run_id }}
       - run: python -m remendo_etl.run
         env:
           PORTAL_API_KEY: ${{ secrets.PORTAL_API_KEY }}

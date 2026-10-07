@@ -65,9 +65,11 @@ def get_json(url, params=None, headers=None, pausa=0.0, tentativas=5):
             continue
         if r.status_code in (401, 403):
             raise SystemExit(f"{r.status_code} em {url}: confira a chave PORTAL_API_KEY.")
+        if r.status_code >= 400:
+            print(f"HTTP {r.status_code} em {r.url}: {r.text[:300]!r}", flush=True)
         r.raise_for_status()
         time.sleep(pausa)
-        return r.json()
+        return r.json() 
     raise RuntimeError(f"Falhou após {tentativas} tentativas: {url}")
 
 
