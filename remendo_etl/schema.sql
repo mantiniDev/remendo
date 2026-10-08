@@ -25,6 +25,10 @@ CREATE TABLE IF NOT EXISTS documentos(
 );
 CREATE INDEX IF NOT EXISTS ix_doc_em ON documentos(emenda_codigo);
 
+CREATE TABLE IF NOT EXISTS docs_carregados(   -- emendas cujos documentos já foram baixados (com o hash dos valores na época)
+  codigo TEXT PRIMARY KEY, hash TEXT
+);
+
 CREATE TABLE IF NOT EXISTS etl_runs(
   id INTEGER PRIMARY KEY AUTOINCREMENT, fonte TEXT, inicio TEXT, fim TEXT,
   registros INTEGER, status TEXT, erro TEXT
@@ -37,7 +41,7 @@ SELECT t.*,
     WHEN t.empenhado <= 0 THEN 'sem_empenho'
     WHEN t.pago >= t.empenhado THEN 'paga'
     WHEN t.pago > 0 THEN 'parcial'
-    WHEN COALESCE(t.ultima_mov, t.ano || '-12-31') < date('now','-180 days') THEN 'parada'
+    WHEN t.ultima_mov IS NOT NULL AND t.ultima_mov < date('now','-180 days') THEN 'parada'
     ELSE 'empenhada'
   END AS status
 FROM (

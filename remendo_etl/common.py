@@ -5,7 +5,27 @@ DB_PATH = os.environ.get("REMENDO_DB", "remendo.db")
 _SESSION = requests.Session()
 
 
+def log(*a):
+    print(*a, flush=True)
+
+
+def _banco_ok():
+    if not os.path.exists(DB_PATH):
+        return True
+    try:
+        c = sqlite3.connect(DB_PATH)
+        try:
+            return c.execute("PRAGMA quick_check").fetchone()[0] == "ok"
+        finally:
+            c.close()
+    except sqlite3.DatabaseError:
+        return False
+
+
 def db():
+    if not _banco_ok():  # ex.: execução morta no meio de uma gravação
+        os.replace(DB_PATH, DB_PATH + ".corrompido")
+        log(f"AVISO: {DB_PATH} estava corrompido; movido para {DB_PATH}.corrompido e recriado do zero.")
     c = sqlite3.connect(DB_PATH)
     c.row_factory = sqlite3.Row
     with open(os.path.join(os.path.dirname(__file__), "schema.sql"), encoding="utf-8") as f:
@@ -59,17 +79,21 @@ def pick(d, *keys, default=None):
 
 def get_json(url, params=None, headers=None, pausa=0.0, tentativas=5):
     for i in range(tentativas):
-        r = _SESSION.get(url, params=params, headers=headers, timeout=60)
-        if r.status_code in (429, 500, 502, 503, 504):
+        try:
+            r = _SESSION.get(url, params=params, headers=headers, timeout=60)
+        except (requests.ConnectionError, requests.Timeout):
             time.sleep(min(90, 2 ** (i + 1)))
+            continue
+        if r.status_code in (429, 500, 502, 503, 504):
+            time.sleep(60 if r.status_code == 429 else min(90, 2 ** (i + 1)))
             continue
         if r.status_code in (401, 403):
             raise SystemExit(f"{r.status_code} em {url}: confira a chave PORTAL_API_KEY.")
         if r.status_code >= 400:
-            print(f"HTTP {r.status_code} em {r.url}: {r.text[:300]!r}", flush=True)
+            log(f"HTTP {r.status_code} em {r.url}: {r.text[:300]!r}")
         r.raise_for_status()
         time.sleep(pausa)
-        return r.json() 
+        return r.json()
     raise RuntimeError(f"Falhou após {tentativas} tentativas: {url}")
 
 

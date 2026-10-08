@@ -3,10 +3,17 @@ on:
   schedule:
     - cron: "0 7 * * *"   # todo dia, 04h em Brasília
   workflow_dispatch:
+    inputs:
+      anos:
+        description: "Anos a carregar, separados por espaço (vazio = ano atual e 2 anteriores)"
+        required: false
+        default: "2024"
 jobs:
   etl:
     runs-on: ubuntu-latest
     timeout-minutes: 350
+    env:
+      PYTHONUNBUFFERED: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -18,18 +25,17 @@ jobs:
           path: remendo.db
           key: remendo-db-${{ github.run_id }}
           restore-keys: remendo-db-
-      - run: python -m remendo_etl.run --anos 2024
+      - name: Coletar e exportar
+        run: python -u -m remendo_etl.run --max-minutos 300 ${ANOS:+--anos $ANOS}
         timeout-minutes: 330
         env:
           PORTAL_API_KEY: ${{ secrets.PORTAL_API_KEY }}
+          ANOS: ${{ github.event.inputs.anos }}
       - name: Salvar banco
         if: always()
         uses: actions/cache/save@v4
         with:
           path: remendo.db
           key: remendo-db-${{ github.run_id }}
-      - run: python -m remendo_etl.run
-        env:
-          PORTAL_API_KEY: ${{ secrets.PORTAL_API_KEY }}
       - uses: actions/upload-artifact@v4
         with: { name: dados-remendo, path: saida/ }

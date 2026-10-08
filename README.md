@@ -67,7 +67,10 @@ têm os documentos rebaixados. Para outro servidor, basta um `cron` chamando `py
 1. **Valor "indicado" ainda não existe aqui.** O endpoint de emendas do Portal traz empenhado, liquidado e pago, e
    não a dotação proposta. Enquanto o SIOP não for integrado, o site deve falar em "empenhado", não em "prometeu".
 2. Só parlamentares **em exercício** são carregados; quem já saiu aparece sem partido e UF.
-3. O limite de chamadas por minuto da API é restrito. O pipeline espera `RATE_PAUSA` segundos (padrão 0,7)
-   e tenta de novo em erro 429. A primeira carga de vários anos pode levar horas; as seguintes são incrementais.
+3. O limite de chamadas por minuto da API é restrito (cerca de 90/min, segundo fonte não oficial). O pipeline espera
+   `RATE_PAUSA` segundos entre chamadas (padrão 0,25) e, em erro 429, aguarda 60 s. A primeira carga leva horas:
+   com `--max-minutos 300` ela para sozinha, exporta o que já tem e continua de onde parou na execução seguinte
+   (os documentos são baixados dos maiores valores para os menores). Enquanto houver emendas sem documentos,
+   `meta.json` traz `carga_parcial: true` e `emendas_sem_documentos`.
 4. Os nomes exatos dos campos foram lidos da documentação da API e **não foram testados com chave real**.
    Por isso existe o `check_fields`, e o código tolera variações comuns de nome (`pick`).

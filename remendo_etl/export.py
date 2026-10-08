@@ -41,9 +41,12 @@ def run():
     for k, v in out["rankings"].items():
         out["rankings"][k] = [_fmt(l) for l in v]
 
+    pend = con.execute("SELECT COUNT(*) FROM emendas e LEFT JOIN docs_carregados c ON c.codigo=e.codigo "
+                       "WHERE e.empenhado>0 AND (c.hash IS NULL OR c.hash<>e.hash)").fetchone()[0]
     meta = {"atualizado_em": agora(),
             "fontes": ["Portal da Transparência (CGU)", "API de Dados Abertos da Câmara", "Dados Abertos do Senado"],
-            "ultimas_cargas": _linhas(con, "SELECT fonte, fim, registros, status FROM etl_runs WHERE status='ok' ORDER BY id DESC LIMIT 6")}
+            "ultimas_cargas": _linhas(con, "SELECT fonte, fim, registros, status FROM etl_runs WHERE status='ok' ORDER BY id DESC LIMIT 6"),
+            "emendas_sem_documentos": pend, "carga_parcial": pend > 0}
     out["meta"] = meta
     for chave, dados in out.items():
         with open(os.path.join(SAIDA, f"{chave}.json"), "w", encoding="utf-8") as f:
