@@ -81,3 +81,10 @@ têm os documentos rebaixados. Para outro servidor, basta um `cron` chamando `py
 - `schema.sql`: coluna `categoria` (individual, bancada, comissão, relator) na view e tabela `emendas_duplicadas`.
 - `export.py`: novos `categorias.json`, `nao_vinculados.json`, `duplicados.json`; rankings separados por Casa (`maior_nao_pago_*`, `menos_executam_*`) e `coletivas_menos_executam`; `pct_pago` limitado a 100; `meta.json` com `vinculo_individuais` e `codigos_repetidos`.
 - Dado novo: variável opcional `REMENDO_LEGISLATURAS` (padrão `57`).
+
+## Atualização 3
+- Código repetido na API = linhas diferentes (ex.: parte "Transferências Especiais" e parte "Finalidade Definida" da mesma emenda). Agora cada linha é guardada (a segunda como `código~2`); cópias exatas são ignoradas. Documentos são baixados só para o código-base.
+- Correção do casamento de nomes: pontos e "Dep./Sen." são removidos dos dois lados (antes só do autor, o que desfez o vínculo de "Dr.", "Pr.", "Jr."). Um vínculo existente nunca é apagado se a nova busca falhar.
+- Emendas de ex-parlamentar ("NOME (EX-PARLAMENTAR FULANO, NOS TERMOS ...)") passam a usar o nome de FULANO.
+- `nao_vinculados.json` agora diz o motivo (`sem_candidato` ou `ambiguo`, com os candidatos).
+- Partidos "S.PART." e "S/Partido" viram "Sem partido".

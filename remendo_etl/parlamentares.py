@@ -11,6 +11,8 @@ LEGISLATURAS = os.environ.get("REMENDO_LEGISLATURAS", "57").split()  # 57 = 2023
 
 
 def _upsert(con, id_, casa, nome, civil, partido, uf):
+    if (partido or "").upper().replace(".", "").replace("/", "").replace(" ", "") in ("SPART", "SEMPARTIDO"):
+        partido = "Sem partido"
     con.execute(
         """INSERT INTO parlamentares(id,casa,nome,nome_norm,nome_civil_norm,partido,uf,atualizado_em)
            VALUES(?,?,?,?,?,?,?,?)

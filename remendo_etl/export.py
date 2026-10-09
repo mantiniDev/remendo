@@ -1,6 +1,7 @@
 """Gera os arquivos que o site consome (JSON) e os downloads da página Dados abertos (CSV)."""
 import csv, json, os
-from .common import agora, db
+from .common import agora, db, norm
+from . import emendas as _em
 
 SAIDA = os.environ.get("REMENDO_SAIDA", "saida")
 REAIS = lambda c: round((c or 0) / 100, 2)
@@ -65,8 +66,14 @@ def run():
         duplicados.append(r)
     out["duplicados"] = duplicados
 
+    for l in out["nao_vinculados"]:  # por que não vinculou: nenhum candidato, ou mais de um com o mesmo nome
+        metodo, ids = _em.candidatos(con, norm(l["autor_nome"]))
+        l["motivo"] = "ambiguo" if len(ids) > 1 else "sem_candidato"
+        if len(ids) > 1:
+            l["candidatos"] = sorted(ids)
+
     pend = con.execute("SELECT COUNT(*) FROM emendas e LEFT JOIN docs_carregados c ON c.codigo=e.codigo "
-                       "WHERE e.empenhado>0 AND (c.hash IS NULL OR c.hash<>e.hash)").fetchone()[0]
+                       "WHERE e.codigo NOT LIKE '%~%' AND e.empenhado>0 AND (c.hash IS NULL OR c.hash<>e.hash)").fetchone()[0]
     meta = {"atualizado_em": agora(),
             "fontes": ["Portal da Transparência (CGU)", "API de Dados Abertos da Câmara", "Dados Abertos do Senado"],
             "ultimas_cargas": _linhas(con, "SELECT fonte, fim, registros, status FROM etl_runs WHERE status='ok' ORDER BY id DESC LIMIT 6"),

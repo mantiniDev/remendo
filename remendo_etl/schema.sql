@@ -56,6 +56,6 @@ FROM (
          WHEN e.tipo LIKE '%Comiss%'     THEN 'comissao'
          WHEN e.tipo LIKE '%Relator%'    THEN 'relator'
          ELSE 'outra' END AS categoria,
-    (SELECT MAX(d.data) FROM documentos d WHERE d.emenda_codigo = e.codigo) AS ultima_mov
+    (SELECT MAX(d.data) FROM documentos d WHERE d.emenda_codigo = CASE WHEN instr(e.codigo,'~')>0 THEN substr(e.codigo,1,instr(e.codigo,'~')-1) ELSE e.codigo END) AS ultima_mov
   FROM emendas e LEFT JOIN parlamentares p ON p.id = e.parlamentar_id
 ) t;

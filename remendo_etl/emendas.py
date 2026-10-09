@@ -1,5 +1,5 @@
 """Carrega emendas e seus documentos (empenho, liquidação, pagamento) do Portal da Transparência."""
-import hashlib, json, os, sys, time
+import hashlib, json, os, re, sys, time
 import requests
 from .common import Execucao, agora, centavos, data_iso, db, get_json, log, norm, pick
 
@@ -34,7 +34,13 @@ def paginas(caminho, params=None):
 
 _STOP = {"DE", "DA", "DO", "DOS", "DAS", "E"}
 _TITULOS = {"DEP", "DEPUTADO", "DEPUTADA", "SEN", "SENADOR", "SENADORA"}
+_EX = re.compile(r"EX-PARLAMENTAR\s+([^,)]+)")
 _PARL = None
+
+
+def _limpa(s):
+    """Mesma limpeza para autor e parlamentar: sem pontos, sem 'Dep./Sen.', espaços simples."""
+    return " ".join(t for t in (s or "").replace(".", " ").split() if t not in _TITULOS)
 
 
 def _tokens(s):
@@ -44,33 +50,38 @@ def _tokens(s):
 def _parl(con):
     global _PARL
     if _PARL is None:
-        _PARL = [(r["id"], r["nome_norm"], r["nome_civil_norm"]) for r in
+        _PARL = [(r["id"], _limpa(r["nome_norm"]), _limpa(r["nome_civil_norm"])) for r in
                  con.execute("SELECT id, nome_norm, nome_civil_norm FROM parlamentares")]
     return _PARL
 
 
-def achar_parlamentar(con, autor_norm):
-    """1) nome igual (parlamentar ou civil); 2) nomes em que um contém todas as palavras do outro (mín. 2 palavras).
-    Só vincula se houver exatamente um candidato; ambíguo ou ausente fica sem vínculo."""
-    autor_norm = " ".join(t for t in autor_norm.replace(".", " ").split() if t not in _TITULOS) if autor_norm else autor_norm
-    if not autor_norm:
-        return None
+def candidatos(con, autor_norm):
+    """Retorna (método, ids). Método: 'exato' (nome igual), 'palavras' (um nome contém todas as palavras do outro,
+    mín. 2) ou 'nenhum'. Emendas de ex-parlamentar ('... (EX-PARLAMENTAR FULANO, NOS TERMOS ...)') usam o nome de FULANO."""
+    m = _EX.search(autor_norm or "")
+    autor = _limpa(m.group(1) if m else autor_norm)
+    if not autor:
+        return "nenhum", set()
     lista = _parl(con)
-    ids = {i for i, n, c in lista if autor_norm in (n, c)}
-    if len(ids) == 1:
-        return next(iter(ids))
+    ids = {i for i, n, c in lista if autor in (n, c)}
     if ids:
-        return None
-    ta = _tokens(autor_norm)
-    if len(ta) < 2:
-        return None
-    ids = set()
-    for i, n, c in lista:
-        for nome in (n, c):
-            tn = _tokens(nome)
-            menor, maior = (ta, tn) if len(ta) <= len(tn) else (tn, ta)
-            if len(menor) >= 2 and menor <= maior:
-                ids.add(i)
+        return "exato", ids
+    ta = _tokens(autor)
+    if len(ta) >= 2:
+        for i, n, c in lista:
+            for nome in (n, c):
+                tn = _tokens(nome)
+                menor, maior = (ta, tn) if len(ta) <= len(tn) else (tn, ta)
+                if len(menor) >= 2 and menor <= maior:
+                    ids.add(i)
+        if ids:
+            return "palavras", ids
+    return "nenhum", set()
+
+
+def achar_parlamentar(con, autor_norm):
+    """Só vincula se houver exatamente um candidato; ambíguo ou ausente fica sem vínculo."""
+    _, ids = candidatos(con, autor_norm)
     return next(iter(ids)) if len(ids) == 1 else None
 
 
@@ -88,9 +99,10 @@ def vincular_pendentes(con):
     log(f"Autores individuais vinculados na revisão: {n}")
 
 
-def upsert_emenda(con, d):
-    """Retorna True se a emenda é nova ou mudou de valores."""
-    codigo = str(pick(d, "codigoEmenda", "codigo"))
+def upsert_emenda(con, d, codigo=None):
+    """Retorna True se a emenda é nova ou mudou de valores. `codigo` pode ser uma chave própria ('código~2')
+    quando a API devolve duas linhas diferentes com o mesmo código."""
+    codigo = codigo or str(pick(d, "codigoEmenda", "codigo"))
     autor = pick(d, "nomeAutor", "autor", default="")
     vals = dict(
         empenhado=centavos(pick(d, "valorEmpenhado")), liquidado=centavos(pick(d, "valorLiquidado")),
@@ -103,7 +115,7 @@ def upsert_emenda(con, d):
              empenhado,liquidado,pago,resto_pago,hash,raw,atualizado_em)
            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
            ON CONFLICT(codigo) DO UPDATE SET ano=excluded.ano,numero=excluded.numero,tipo=excluded.tipo,
-             autor_nome=excluded.autor_nome,autor_norm=excluded.autor_norm,parlamentar_id=excluded.parlamentar_id,
+             autor_nome=excluded.autor_nome,autor_norm=excluded.autor_norm,parlamentar_id=COALESCE(excluded.parlamentar_id, emendas.parlamentar_id),
              localidade=excluded.localidade,funcao=excluded.funcao,subfuncao=excluded.subfuncao,
              empenhado=excluded.empenhado,liquidado=excluded.liquidado,pago=excluded.pago,resto_pago=excluded.resto_pago,
              hash=excluded.hash,raw=excluded.raw,atualizado_em=excluded.atualizado_em""",
@@ -139,7 +151,7 @@ def carregar_pendentes(con, anos, limite):
     marcas = ",".join("?" * len(anos))
     fila = [r["codigo"] for r in con.execute(
         f"""SELECT e.codigo FROM emendas e LEFT JOIN docs_carregados c ON c.codigo = e.codigo
-            WHERE e.ano IN ({marcas}) AND e.empenhado > 0 AND (c.hash IS NULL OR c.hash <> e.hash)
+            WHERE e.ano IN ({marcas}) AND e.codigo NOT LIKE '%~%' AND e.empenhado > 0 AND (c.hash IS NULL OR c.hash <> e.hash)
             ORDER BY e.ano DESC, e.empenhado DESC""", anos)]
     log(f"Emendas com documentos a baixar: {len(fila)} (mais recentes e de maior valor primeiro)")
     t0, seguidas = time.monotonic(), 0
@@ -175,20 +187,24 @@ def run(anos, com_documentos=True, limite=None):
             for d in paginas("/emendas", {"ano": ano}):
                 cod = str(pick(d, "codigoEmenda", "codigo"))
                 bruto = json.dumps(d, sort_keys=True, ensure_ascii=False)
-                if cod in vistos:  # a chave da tabela é o código: a repetição sobrescreveria a anterior
-                    igual = vistos[cod] == bruto
-                    iguais += igual
-                    diferentes += not igual
+                antes = vistos.setdefault(cod, [])
+                chave = cod
+                if antes:  # a API repetiu o código
+                    igual = bruto in antes
                     con.execute("INSERT INTO emendas_duplicadas(codigo,ano,iguais,primeiro,repetido,visto_em) VALUES(?,?,?,?,?,?)",
-                                (cod, ano, int(igual), vistos[cod], bruto, agora()))
-                else:
-                    vistos[cod] = bruto
-                alteradas += upsert_emenda(con, d)
+                                (cod, ano, int(igual), antes[0], bruto, agora()))
+                    if igual:  # cópia exata: ignora
+                        iguais += 1
+                        continue
+                    diferentes += 1
+                    chave = f"{cod}~{len(antes) + 1}"  # linha diferente (ex.: outra modalidade): guarda como linha própria
+                antes.append(bruto)
+                alteradas += upsert_emenda(con, d, chave)
                 ex.n += 1
             con.commit()
             log(f"{ano}: lista completa ({ex.n} lidas no total; {alteradas} novas ou alteradas neste ano)")
             if iguais or diferentes:
                 log(f"AVISO {ano}: {iguais + diferentes} registros com código repetido "
-                    f"({iguais} idênticos, {diferentes} com conteúdo diferente) — veja duplicados.json")
+                    f"({iguais} cópias ignoradas, {diferentes} linhas diferentes guardadas separadas) — veja duplicados.json")
         if com_documentos:
             carregar_pendentes(con, anos, limite)
