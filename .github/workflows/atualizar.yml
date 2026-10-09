@@ -1,4 +1,4 @@
-name: Atualizar dados do Remendo
+name: Atualizar dados e publicar o site
 on:
   schedule:
     - cron: "0 7 * * *"   # todo dia, 04h em Brasília
@@ -7,7 +7,14 @@ on:
       anos:
         description: "Anos a carregar, separados por espaço (vazio = ano atual e 2 anteriores)"
         required: false
-        default: "2024"
+        default: ""
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: remendo-pages
+  cancel-in-progress: false
 jobs:
   etl:
     runs-on: ubuntu-latest
@@ -39,3 +46,21 @@ jobs:
           key: remendo-db-${{ github.run_id }}
       - uses: actions/upload-artifact@v4
         with: { name: dados-remendo, path: saida/ }
+      - name: Montar o site (páginas + dados)
+        run: |
+          rm -rf _site && mkdir -p _site/dados
+          cp -r site/. _site/
+          cp saida/*.json saida/*.csv _site/dados/
+          touch _site/.nojekyll
+          du -sh _site
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: _site }
+  publicar:
+    needs: etl
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

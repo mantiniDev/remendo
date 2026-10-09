@@ -50,7 +50,7 @@ SELECT t.*,
     ELSE 'empenhada'
   END AS status
 FROM (
-  SELECT e.*, p.partido, p.uf, p.casa,
+  SELECT e.*, p.partido, p.uf, p.casa, p.nome AS parlamentar_nome,
     CASE WHEN e.tipo LIKE '%Individual%' THEN 'individual'
          WHEN e.tipo LIKE '%Bancada%'    THEN 'bancada'
          WHEN e.tipo LIKE '%Comiss%'     THEN 'comissao'

@@ -34,7 +34,6 @@ def paginas(caminho, params=None):
 
 _STOP = {"DE", "DA", "DO", "DOS", "DAS", "E"}
 _TITULOS = {"DEP", "DEPUTADO", "DEPUTADA", "SEN", "SENADOR", "SENADORA"}
-_EX = re.compile(r"EX-PARLAMENTAR\s+([^,)]+)")
 _PARL = None
 
 
@@ -57,9 +56,8 @@ def _parl(con):
 
 def candidatos(con, autor_norm):
     """Retorna (método, ids). Método: 'exato' (nome igual), 'palavras' (um nome contém todas as palavras do outro,
-    mín. 2) ou 'nenhum'. Emendas de ex-parlamentar ('... (EX-PARLAMENTAR FULANO, NOS TERMOS ...)') usam o nome de FULANO."""
-    m = _EX.search(autor_norm or "")
-    autor = _limpa(m.group(1) if m else autor_norm)
+    mín. 2) ou 'nenhum'."""
+    autor = _limpa((autor_norm or "").split("(")[0])  # "NOME (EX-PARLAMENTAR FULANO, NOS TERMOS ...)": vale o nome antes do parêntese
     if not autor:
         return "nenhum", set()
     lista = _parl(con)
