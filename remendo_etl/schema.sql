@@ -29,6 +29,11 @@ CREATE TABLE IF NOT EXISTS docs_carregados(   -- emendas cujos documentos já fo
   codigo TEXT PRIMARY KEY, hash TEXT
 );
 
+CREATE TABLE IF NOT EXISTS emendas_duplicadas(   -- códigos que a API devolveu mais de uma vez na listagem (diagnóstico)
+  id INTEGER PRIMARY KEY AUTOINCREMENT, codigo TEXT, ano INTEGER, iguais INTEGER,
+  primeiro TEXT, repetido TEXT, visto_em TEXT
+);
+
 CREATE TABLE IF NOT EXISTS etl_runs(
   id INTEGER PRIMARY KEY AUTOINCREMENT, fonte TEXT, inicio TEXT, fim TEXT,
   registros INTEGER, status TEXT, erro TEXT
@@ -46,6 +51,11 @@ SELECT t.*,
   END AS status
 FROM (
   SELECT e.*, p.partido, p.uf, p.casa,
+    CASE WHEN e.tipo LIKE '%Individual%' THEN 'individual'
+         WHEN e.tipo LIKE '%Bancada%'    THEN 'bancada'
+         WHEN e.tipo LIKE '%Comiss%'     THEN 'comissao'
+         WHEN e.tipo LIKE '%Relator%'    THEN 'relator'
+         ELSE 'outra' END AS categoria,
     (SELECT MAX(d.data) FROM documentos d WHERE d.emenda_codigo = e.codigo) AS ultima_mov
   FROM emendas e LEFT JOIN parlamentares p ON p.id = e.parlamentar_id
 ) t;

@@ -32,11 +32,60 @@ def paginas(caminho, params=None):
         p += 1
 
 
+_STOP = {"DE", "DA", "DO", "DOS", "DAS", "E"}
+_TITULOS = {"DEP", "DEPUTADO", "DEPUTADA", "SEN", "SENADOR", "SENADORA"}
+_PARL = None
+
+
+def _tokens(s):
+    return frozenset(t for t in (s or "").split() if t not in _STOP)
+
+
+def _parl(con):
+    global _PARL
+    if _PARL is None:
+        _PARL = [(r["id"], r["nome_norm"], r["nome_civil_norm"]) for r in
+                 con.execute("SELECT id, nome_norm, nome_civil_norm FROM parlamentares")]
+    return _PARL
+
+
 def achar_parlamentar(con, autor_norm):
+    """1) nome igual (parlamentar ou civil); 2) nomes em que um contém todas as palavras do outro (mín. 2 palavras).
+    Só vincula se houver exatamente um candidato; ambíguo ou ausente fica sem vínculo."""
+    autor_norm = " ".join(t for t in autor_norm.replace(".", " ").split() if t not in _TITULOS) if autor_norm else autor_norm
     if not autor_norm:
         return None
-    r = con.execute("SELECT id FROM parlamentares WHERE nome_norm=? OR nome_civil_norm=?", (autor_norm, autor_norm)).fetchall()
-    return r[0]["id"] if len(r) == 1 else None  # ambíguo ou ausente: fica sem vínculo
+    lista = _parl(con)
+    ids = {i for i, n, c in lista if autor_norm in (n, c)}
+    if len(ids) == 1:
+        return next(iter(ids))
+    if ids:
+        return None
+    ta = _tokens(autor_norm)
+    if len(ta) < 2:
+        return None
+    ids = set()
+    for i, n, c in lista:
+        for nome in (n, c):
+            tn = _tokens(nome)
+            menor, maior = (ta, tn) if len(ta) <= len(tn) else (tn, ta)
+            if len(menor) >= 2 and menor <= maior:
+                ids.add(i)
+    return next(iter(ids)) if len(ids) == 1 else None
+
+
+def vincular_pendentes(con):
+    """Tenta de novo os autores individuais sem vínculo (a lista de parlamentares pode ter mudado)."""
+    global _PARL
+    _PARL = None
+    n = 0
+    for r in con.execute("SELECT codigo, autor_norm FROM emendas WHERE parlamentar_id IS NULL AND tipo LIKE '%Individual%'").fetchall():
+        pid = achar_parlamentar(con, r["autor_norm"])
+        if pid:
+            con.execute("UPDATE emendas SET parlamentar_id=? WHERE codigo=?", (pid, r["codigo"]))
+            n += 1
+    con.commit()
+    log(f"Autores individuais vinculados na revisão: {n}")
 
 
 def upsert_emenda(con, d):
@@ -118,14 +167,28 @@ def run(anos, com_documentos=True, limite=None):
     """limite: instante (time.monotonic) em que a carga de documentos deve parar sozinha."""
     con = db()
     _semear(con)
-    con.commit()
+    vincular_pendentes(con)
     with Execucao(con, "portal_emendas") as ex:
         for ano in anos:
-            alteradas = 0
+            alteradas, vistos, iguais, diferentes = 0, {}, 0, 0
+            con.execute("DELETE FROM emendas_duplicadas WHERE ano=?", (ano,))
             for d in paginas("/emendas", {"ano": ano}):
+                cod = str(pick(d, "codigoEmenda", "codigo"))
+                bruto = json.dumps(d, sort_keys=True, ensure_ascii=False)
+                if cod in vistos:  # a chave da tabela é o código: a repetição sobrescreveria a anterior
+                    igual = vistos[cod] == bruto
+                    iguais += igual
+                    diferentes += not igual
+                    con.execute("INSERT INTO emendas_duplicadas(codigo,ano,iguais,primeiro,repetido,visto_em) VALUES(?,?,?,?,?,?)",
+                                (cod, ano, int(igual), vistos[cod], bruto, agora()))
+                else:
+                    vistos[cod] = bruto
                 alteradas += upsert_emenda(con, d)
                 ex.n += 1
             con.commit()
             log(f"{ano}: lista completa ({ex.n} lidas no total; {alteradas} novas ou alteradas neste ano)")
+            if iguais or diferentes:
+                log(f"AVISO {ano}: {iguais + diferentes} registros com código repetido "
+                    f"({iguais} idênticos, {diferentes} com conteúdo diferente) — veja duplicados.json")
         if com_documentos:
             carregar_pendentes(con, anos, limite)

@@ -74,3 +74,10 @@ têm os documentos rebaixados. Para outro servidor, basta um `cron` chamando `py
    `meta.json` traz `carga_parcial: true` e `emendas_sem_documentos`.
 4. Os nomes exatos dos campos foram lidos da documentação da API e **não foram testados com chave real**.
    Por isso existe o `check_fields`, e o código tolera variações comuns de nome (`pick`).
+
+## Atualização 2 — qualidade dos dados
+- `parlamentares.py`: além dos "em exercício", carrega a legislatura 57 (Câmara e Senado), para incluir quem se licenciou ou saiu. Se o endereço da legislatura falhar, a carga segue só com os atuais e avisa no log.
+- `emendas.py`: casamento de nomes mais tolerante (prefixos "Dep."/"Sen.", palavras de um nome contidas no outro, só com candidato único); revisão dos autores sem vínculo a cada execução; registro dos códigos repetidos.
+- `schema.sql`: coluna `categoria` (individual, bancada, comissão, relator) na view e tabela `emendas_duplicadas`.
+- `export.py`: novos `categorias.json`, `nao_vinculados.json`, `duplicados.json`; rankings separados por Casa (`maior_nao_pago_*`, `menos_executam_*`) e `coletivas_menos_executam`; `pct_pago` limitado a 100; `meta.json` com `vinculo_individuais` e `codigos_repetidos`.
+- Dado novo: variável opcional `REMENDO_LEGISLATURAS` (padrão `57`).
