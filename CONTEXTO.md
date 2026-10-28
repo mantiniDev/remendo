@@ -25,7 +25,10 @@ Segredo necessário: `PORTAL_API_KEY`.
 
 ## Pendências
 
-- Revisar `meta.json`, `nao_vinculados.json` (campo `motivo`) e `duplicados.json` (artefato `dados-remendo` do
-  workflow). Autores sem vínculo conhecidos: Yury do Paredão, Dayany Bittencourt, Reginete Bispo.
+- Vínculo das individuais: 98,5–98,9% do valor em 2024–2026. Seis autores (Fabio Garcia, Waldemar Oliveira,
+  Rodolfo Nogueira, Eduardo Velloso, Bebeto, Reginete Bispo) ficavam ambíguos com homônimos `S-…` vindos dos
+  suplentes da lista da legislatura do Senado; agora suplentes sem exercício são ignorados. Sem candidato
+  (nome diferente na Câmara): Yury do Paredão, Dayany Bittencourt, Rafael Bento, Marcivania Flexa. Para esses,
+  preencher `APELIDOS` em `remendo_etl/emendas.py` com ids conferidos.
 - Conferir no navegador se o status "parada" está preenchido e se "Enforce HTTPS" está marcado no Pages.
 - Ideias: valor indicado (SIOP), página por município, imagens de compartilhamento por parlamentar.
