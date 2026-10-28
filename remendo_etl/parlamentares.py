@@ -70,6 +70,9 @@ def senado(con):
                     raise
                 log(f"AVISO: {url} indisponível ({e}); seguindo só com os atuais.")
                 continue
+            log(f"Senado: {len(lista)} senadores em {url}")
+            if not lista:
+                log(f"AVISO: {url} respondeu sem a lista 'Parlamentar'; o formato pode ter mudado.")
             for p in lista:
                 i = p["IdentificacaoParlamentar"]
                 _upsert(con, f"S-{i['CodigoParlamentar']}", "Senado", i.get("NomeParlamentar"),
