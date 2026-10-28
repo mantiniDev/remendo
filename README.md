@@ -72,8 +72,8 @@ têm os documentos rebaixados. Para outro servidor, basta um `cron` chamando `py
    com `--max-minutos 300` ela para sozinha, exporta o que já tem e continua de onde parou na execução seguinte
    (os documentos são baixados dos maiores valores para os menores). Enquanto houver emendas sem documentos,
    `meta.json` traz `carga_parcial: true` e `emendas_sem_documentos`.
-4. Os nomes exatos dos campos foram lidos da documentação da API e **não foram testados com chave real**.
-   Por isso existe o `check_fields`, e o código tolera variações comuns de nome (`pick`).
+4. Os nomes dos campos foram conferidos com a chave real nas execuções diárias do workflow. O `check_fields` e a
+   tolerância a variações de nome (`pick`) continuam no código para avisar se a API mudar.
 
 ## Atualização 2 — qualidade dos dados
 - `parlamentares.py`: além dos "em exercício", carrega a legislatura 57 (Câmara e Senado), para incluir quem se licenciou ou saiu. Se o endereço da legislatura falhar, a carga segue só com os atuais e avisa no log.

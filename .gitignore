@@ -1,2 +1,7 @@
 __pycache__/
 *.pyc
+remendo.db
+remendo.db-*
+saida/
+_site/
+*.zip
