@@ -178,6 +178,60 @@ def carregar_pendentes(con, anos, limite):
     con.commit()
 
 
+def carregar_favorecido(con, emenda_codigo, documento):
+    """Detalhe de um empenho: favorecido (CNPJ/CPF, nome, UF), modalidade, órgão e observação.
+    Só o empenho: na liquidação e no pagamento o favorecido pode ser um intermediário (ex.: Banco do Brasil
+    num pagamento em lote) e o valor é o do lote inteiro."""
+    try:
+        d = get_json(f"{BASE}/despesas/documentos/{documento}", headers=_headers(), pausa=PAUSA)
+    except requests.HTTPError as e:
+        if e.response is None or e.response.status_code not in (400, 404):
+            raise
+        # documento que a API não encontra: registra para não tentar de novo todo dia
+        con.execute("INSERT OR REPLACE INTO favorecidos(documento, emenda_codigo, erro, carregado_em) VALUES(?,?,?,?)",
+                    (documento, emenda_codigo, f"HTTP {e.response.status_code}", agora()))
+        return
+    d = d or {}
+    con.execute(
+        """INSERT OR REPLACE INTO favorecidos(documento,emenda_codigo,data,especie,cnpj,nome,uf,intermediario,modalidade,
+             orgao,ug,valor,observacao,erro,raw,carregado_em) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (documento, emenda_codigo, data_iso(pick(d, "data")), pick(d, "especie"),
+         pick(d, "codigoFavorecido"), pick(d, "nomeFavorecido"), pick(d, "ufFavorecido"),
+         int(bool(pick(d, "favorecidoIntermediario", default=False))), pick(d, "modalidade"),
+         pick(d, "orgaoSuperior", "orgao"), pick(d, "ug"), centavos(pick(d, "valor")), pick(d, "observacao"),
+         None if d else "resposta vazia", json.dumps(d, ensure_ascii=False), agora()))
+
+
+def carregar_favorecidos(con, anos, limite):
+    """Um pedido por empenho ainda sem detalhe. Retomável: o que não couber no tempo fica para a próxima execução."""
+    marcas = ",".join("?" * len(anos))
+    fila = [(r["emenda_codigo"], r["codigo_doc"]) for r in con.execute(
+        f"""SELECT DISTINCT d.emenda_codigo, d.codigo_doc FROM documentos d JOIN emendas e ON e.codigo = d.emenda_codigo
+            LEFT JOIN favorecidos f ON f.documento = d.codigo_doc
+            WHERE e.ano IN ({marcas}) AND d.fase LIKE 'Empenho%' AND d.codigo_doc <> '' AND f.documento IS NULL
+            ORDER BY e.ano DESC, e.empenhado DESC""", anos)]
+    log(f"Empenhos sem favorecido a consultar: {len(fila)}")
+    t0, seguidas = time.monotonic(), 0
+    for i, (emenda, doc) in enumerate(fila, 1):
+        if limite and time.monotonic() >= limite:
+            log(f"Tempo máximo atingido: {i - 1} de {len(fila)} empenhos nesta execução; o restante continua na próxima.")
+            break
+        try:
+            carregar_favorecido(con, emenda, doc)
+            seguidas = 0
+        except (requests.RequestException, RuntimeError) as e:
+            seguidas += 1
+            log(f"AVISO: detalhe do empenho {doc} falhou ({e}); fica para a próxima execução.")
+            if seguidas >= 20:
+                log("20 falhas seguidas; interrompendo a carga de favorecidos.")
+                break
+            continue
+        if i % 100 == 0:
+            con.commit()
+            log(f"  favorecidos: {i}/{len(fila)} empenhos ({(time.monotonic() - t0) / 60:.0f} min)")
+    con.commit()
+
+
 def run(anos, com_documentos=True, limite=None):
     """limite: instante (time.monotonic) em que a carga de documentos deve parar sozinha."""
     con = db()
@@ -211,3 +265,4 @@ def run(anos, com_documentos=True, limite=None):
                     f"({iguais} cópias ignoradas, {diferentes} linhas diferentes guardadas separadas) — veja duplicados.json")
         if com_documentos:
             carregar_pendentes(con, anos, limite)
+            carregar_favorecidos(con, anos, limite)  # usa o tempo que sobrar depois dos documentos
