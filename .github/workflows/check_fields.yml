@@ -1,0 +1,36 @@
+name: Conferir campos da API
+on:
+  workflow_dispatch:
+    inputs:
+      ano:
+        description: "Ano das emendas"
+        required: false
+        default: "2024"
+      emendas:
+        description: "Quantas emendas (de tipos diferentes) consultar"
+        required: false
+        default: "4"
+permissions:
+  contents: read
+jobs:
+  campos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -r requirements.txt
+      - name: Campos de /emendas, /emendas/documentos e /despesas/documentos
+        shell: bash   # com pipefail: erro do Python não some atrás do tee
+        run: python -u -m remendo_etl.check_fields "$ANO" "$EMENDAS" | tee campos.txt
+        env:
+          PORTAL_API_KEY: ${{ secrets.PORTAL_API_KEY }}
+          ANO: ${{ github.event.inputs.ano }}
+          EMENDAS: ${{ github.event.inputs.emendas }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: campos-api
+          path: campos.txt
