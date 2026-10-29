@@ -35,6 +35,9 @@ def paginas(caminho, params=None):
 _STOP = {"DE", "DA", "DO", "DOS", "DAS", "E"}
 _TITULOS = {"DEP", "DEPUTADO", "DEPUTADA", "SEN", "SENADOR", "SENADORA"}
 _PARL = None
+# Autor (como vem no Portal, normalizado) -> id do parlamentar, para quem usa nome diferente na Câmara/Senado.
+# Use só ids conferidos no site da Câmara (camara.leg.br/deputados/<id>) ou do Senado.
+APELIDOS = {}
 
 
 def _limpa(s):
@@ -55,12 +58,14 @@ def _parl(con):
 
 
 def candidatos(con, autor_norm):
-    """Retorna (método, ids). Método: 'exato' (nome igual), 'palavras' (um nome contém todas as palavras do outro,
+    """Retorna (método, ids). Método: 'apelido' (tabela APELIDOS), 'exato' (nome igual), 'palavras' (um nome contém todas as palavras do outro,
     mín. 2) ou 'nenhum'."""
     autor = _limpa((autor_norm or "").split("(")[0])  # "NOME (EX-PARLAMENTAR FULANO, NOS TERMOS ...)": vale o nome antes do parêntese
     if not autor:
         return "nenhum", set()
     lista = _parl(con)
+    if APELIDOS.get(autor) in {i for i, _, _ in lista}:
+        return "apelido", {APELIDOS[autor]}
     ids = {i for i, n, c in lista if autor in (n, c)}
     if ids:
         return "exato", ids

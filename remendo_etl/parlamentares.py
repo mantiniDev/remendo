@@ -59,8 +59,27 @@ def _lista_senadores(obj):
     return []
 
 
+def _mandatos(p):
+    m = (p.get("Mandatos") or {}).get("Mandato") or []
+    return m if isinstance(m, list) else [m]
+
+
+def _so_suplente(p):
+    """A lista da legislatura traz também os suplentes, inclusive os que nunca exerceram. Eles geram homônimos
+    (ex.: um deputado que é suplente de senador) e deixam o vínculo das emendas ambíguo. Sem dados de mandato,
+    o registro é mantido."""
+    ms = _mandatos(p)
+    if not ms:
+        return False
+    for m in ms:
+        if "suplente" not in str(m.get("DescricaoParticipacao", "")).lower() or m.get("Exercicios"):
+            return False
+    return True
+
+
 def senado(con):
     with Execucao(con, "senado") as ex:
+        vistos = set()
         for url in [SENADO_LEG.format(l) for l in LEGISLATURAS] + [SENADO]:
             try:
                 r = get_json(url, headers={"Accept": "application/json"})
@@ -70,15 +89,27 @@ def senado(con):
                     raise
                 log(f"AVISO: {url} indisponível ({e}); seguindo só com os atuais.")
                 continue
+            if url != SENADO:
+                n_antes = len(lista)
+                lista = [p for p in lista if not _so_suplente(p)]
+                log(f"Senado: {n_antes - len(lista)} suplentes sem exercício ignorados em {url}")
             log(f"Senado: {len(lista)} senadores em {url}")
             if not lista:
                 log(f"AVISO: {url} respondeu sem a lista 'Parlamentar'; o formato pode ter mudado.")
             for p in lista:
                 i = p["IdentificacaoParlamentar"]
+                uf = i.get("UfParlamentar") or next((m.get("UfParlamentar") for m in _mandatos(p) if m.get("UfParlamentar")), None)
                 _upsert(con, f"S-{i['CodigoParlamentar']}", "Senado", i.get("NomeParlamentar"),
                         pick(i, "NomeCompletoParlamentar", "NomeParlamentar"),
-                        i.get("SiglaPartidoParlamentar"), i.get("UfParlamentar"))
+                        i.get("SiglaPartidoParlamentar"), uf)
+                vistos.add(f"S-{i['CodigoParlamentar']}")
                 ex.n += 1
+        # remove quem saiu das listas (ex.: suplentes carregados antes deste filtro), se não tiver emenda vinculada
+        antigos = [r[0] for r in con.execute(
+            "SELECT id FROM parlamentares WHERE casa='Senado' AND id NOT IN (SELECT parlamentar_id FROM emendas WHERE parlamentar_id IS NOT NULL)")]
+        fora = [i for i in antigos if i not in vistos]
+        con.executemany("DELETE FROM parlamentares WHERE id=?", [(i,) for i in fora])
+        log(f"Senado: {len(fora)} registros fora das listas removidos")
 
 
 def run():
