@@ -34,6 +34,14 @@ CREATE TABLE IF NOT EXISTS emendas_duplicadas(   -- códigos que a API devolveu 
   primeiro TEXT, repetido TEXT, visto_em TEXT
 );
 
+CREATE TABLE IF NOT EXISTS favorecidos(   -- detalhe de cada empenho (/despesas/documentos): quem recebeu
+  documento TEXT PRIMARY KEY, emenda_codigo TEXT, data TEXT, especie TEXT,
+  cnpj TEXT, nome TEXT, uf TEXT, intermediario INTEGER, modalidade TEXT, orgao TEXT, ug TEXT,
+  valor INTEGER, observacao TEXT, erro TEXT, raw TEXT, carregado_em TEXT
+);
+CREATE INDEX IF NOT EXISTS ix_fav_em ON favorecidos(emenda_codigo);
+CREATE INDEX IF NOT EXISTS ix_fav_cnpj ON favorecidos(cnpj);
+
 CREATE TABLE IF NOT EXISTS etl_runs(
   id INTEGER PRIMARY KEY AUTOINCREMENT, fonte TEXT, inicio TEXT, fim TEXT,
   registros INTEGER, status TEXT, erro TEXT

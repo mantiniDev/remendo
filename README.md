@@ -88,3 +88,11 @@ têm os documentos rebaixados. Para outro servidor, basta um `cron` chamando `py
 - Emendas de ex-parlamentar ("NOME (EX-PARLAMENTAR FULANO, NOS TERMOS ...)") passam a usar o nome de FULANO.
 - `nao_vinculados.json` agora diz o motivo (`sem_candidato` ou `ambiguo`, com os candidatos).
 - Partidos "S.PART." e "S/Partido" viram "Sem partido".
+
+## Atualização 4: quem recebeu (favorecidos)
+- `emendas.py`: depois dos documentos, consulta `/despesas/documentos/{codigo}` para cada **empenho** e grava o favorecido (CNPJ, nome, UF), a modalidade, o órgão e a observação na tabela `favorecidos`. A carga é retomável e usa o tempo que sobra do `--max-minutos`. Liquidação e pagamento ficam de fora, porque neles o favorecido pode ser um intermediário (ex.: Banco do Brasil num pagamento em lote) e o valor é o do lote. Um documento que a API não encontra (400/404) é registrado com `erro` e não é consultado de novo.
+- `export.py`: novos `favorecidos.json` (ranking por favorecido e ano, indicações e cobertura) e `favorecidos_{ano}.json` (favorecidos, CNES e indicação de cada emenda, pelo código-base). O CSV ganha `favorecido_cnpj`, `favorecido_nome` e `indicado_por`. O `meta.json` traz `favorecidos_pendentes` e `cobertura_favorecidos`.
+  - Quando uma emenda tem mais de um favorecido, empenhado e pago são divididos na proporção dos empenhos (reforços somam, anulações subtraem).
+  - CNES e indicação ("DA SENADORA FULANA", "PELO DEPUTADO …") são lidos do texto livre da observação. A indicação só é extraída em emendas de comissão, bancada ou relator.
+- Site: seção "Quem recebeu" na página da emenda e nova página `favorecidos.html` ("Quem recebe"), com filtro por natureza (entidade privada, ente ou fundo público, aplicação direta).
+- Workflow manual "Conferir campos da API" (`check_fields.yml`): mostra os campos reais dos três endpoints.

@@ -31,4 +31,7 @@ Segredo necessário: `PORTAL_API_KEY`.
   (nome diferente na Câmara): Yury do Paredão, Dayany Bittencourt, Rafael Bento, Marcivania Flexa. Para esses,
   preencher `APELIDOS` em `remendo_etl/emendas.py` com ids conferidos.
 - Conferir no navegador se o status "parada" está preenchido e se "Enforce HTTPS" está marcado no Pages.
-- Ideias: valor indicado (SIOP), página por município, imagens de compartilhamento por parlamentar.
+- Favorecidos: a primeira carga de `/despesas/documentos` deve levar 2–3 execuções diárias. Acompanhar no log
+  `favorecidos: N/M empenhos` e em `meta.json` (`favorecidos_pendentes`, `cobertura_favorecidos`).
+- Ideias: valor indicado (SIOP), página por município e por favorecido (CNPJ), imagens de compartilhamento por
+  parlamentar, cruzar CNES com o cadastro de estabelecimentos de saúde.

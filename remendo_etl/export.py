@@ -21,6 +21,62 @@ def _fmt(l):
     return l
 
 
+_CNES = re.compile(r"\bCNES\s*:?\s*(\d{7})\b")
+# "..., DA SENADORA ELIZIANE GAMA-RP8." / "DO DEPUTADO FULANO DE TAL, ..." (texto livre da observação do empenho)
+_INDICACAO = re.compile(r"\b(?:D|PEL)[OA]S?\s+(?:DEPUTAD[OA]S?(?:\s+FEDERA(?:L|IS))?|SENADOR(?:A|ES)?|DEP\.?|SEN\.?)\s+"
+                        r"([A-Z][A-Z' ]{2,60}?)(?=\s*(?:-|,|\.|;|\(|/|\bRP\s*\d|\bPROCESSO\b|$))")
+
+
+def natureza(modalidade):
+    """Agrupa a modalidade de aplicação: entidade privada, aplicação direta (contratos da União) ou ente público."""
+    m = norm(modalidade or "")
+    if "PRIVAD" in m:
+        return "privada"
+    if m.startswith("90") or "APLICAC" in m and "DIRETA" in m:
+        return "direta"
+    return "publica" if m else None
+
+
+def favorecidos_por_emenda(con):
+    """{codigo_base: {"f": [...], "cnes": [...], "ind": {...}}} a partir dos empenhos detalhados.
+    O peso de cada favorecido é o valor dos seus empenhos (reforços somam, anulações subtraem)."""
+    out = {}
+    for r in con.execute("""SELECT emenda_codigo, cnpj, nome, uf, modalidade,
+              SUM(CASE WHEN especie LIKE 'Anula%' THEN -valor ELSE valor END) AS valor
+            FROM favorecidos WHERE erro IS NULL AND cnpj IS NOT NULL AND intermediario = 0
+            GROUP BY emenda_codigo, cnpj ORDER BY emenda_codigo, valor DESC"""):
+        out.setdefault(r["emenda_codigo"], {"f": []})["f"].append(
+            {"cnpj": r["cnpj"], "nome": r["nome"], "uf": r["uf"], "modalidade": r["modalidade"],
+             "natureza": natureza(r["modalidade"]), "valor": REAIS(r["valor"])})
+    cat = {r["codigo"]: r["categoria"] for r in con.execute("SELECT codigo, categoria FROM v_emendas WHERE codigo NOT LIKE '%~%'")}
+    for r in con.execute("SELECT emenda_codigo, observacao FROM favorecidos WHERE observacao IS NOT NULL ORDER BY data"):
+        obs = norm(r["observacao"])
+        d = out.get(r["emenda_codigo"])
+        if d is None:
+            continue
+        for c in _CNES.findall(obs):
+            if c not in d.setdefault("cnes", []):
+                d["cnes"].append(c)
+        # quem indicou: só faz sentido onde não há autor individual (comissão, bancada, relator)
+        if "ind" not in d and cat.get(r["emenda_codigo"]) not in (None, "individual"):
+            m = _INDICACAO.search(obs)
+            if m:
+                texto = " ".join(m.group(1).split())
+                _, ids = _em.candidatos(con, texto)
+                d["ind"] = {"texto": texto}
+                if len(ids) == 1:
+                    d["ind"]["id"] = next(iter(ids))
+    return out
+
+
+def _partes(fav, empenhado, pago):
+    """Divide empenhado e pago de uma emenda entre seus favorecidos, na proporção dos empenhos."""
+    total = sum(max(0, f["valor"]) for f in fav)
+    for f in fav:
+        peso = max(0, f["valor"]) / total if total > 0 else 1 / len(fav)
+        yield f, empenhado * peso, pago * peso
+
+
 def run():
     con = db()
     os.makedirs(SAIDA, exist_ok=True)
@@ -81,6 +137,49 @@ def run():
             "vinculo_individuais": _linhas(con, "SELECT ano, ROUND(100.0*SUM(CASE WHEN parlamentar_id IS NOT NULL THEN empenhado ELSE 0 END)/SUM(empenhado),1) AS pct_valor_vinculado, "
                                                 "SUM(parlamentar_id IS NULL) AS emendas_sem_vinculo FROM v_emendas WHERE categoria='individual' GROUP BY ano ORDER BY ano DESC"),
             "codigos_repetidos": len(duplicados)}
+    favs = favorecidos_por_emenda(con)
+    nomes_parl = {r["id"]: r["nome"] for r in con.execute("SELECT id, nome FROM parlamentares")}
+    ranking, indicacoes, cobertura = {}, {}, {}
+    for e in con.execute("SELECT codigo, ano, categoria, parlamentar_id, autor_nome, empenhado, pago FROM v_emendas"):
+        base = e["codigo"].split("~")[0]
+        d = favs.get(base)
+        c = cobertura.setdefault(e["ano"], {"ano": e["ano"], "emendas": 0, "com_favorecido": 0, "empenhado": 0, "empenhado_com_favorecido": 0})
+        c["emendas"] += 1; c["empenhado"] += e["empenhado"]
+        if not d or not d["f"]:
+            continue
+        c["com_favorecido"] += 1; c["empenhado_com_favorecido"] += e["empenhado"]
+        for f, emp, pag in _partes(d["f"], e["empenhado"], e["pago"]):
+            k = (e["ano"], f["cnpj"])
+            r = ranking.setdefault(k, {"ano": e["ano"], "cnpj": f["cnpj"], "nome": f["nome"], "uf": f["uf"], "natureza": f["natureza"],
+                                       "n": 0, "empenhado": 0.0, "pago": 0.0, "_autores": set(), "_cat": set()})
+            r["n"] += 1; r["empenhado"] += emp; r["pago"] += pag
+            r["_autores"].add(e["parlamentar_id"] or e["autor_nome"]); r["_cat"].add(e["categoria"])
+        ind = d.get("ind")
+        if ind:
+            k = (e["ano"], ind.get("id") or ind["texto"])
+            r = indicacoes.setdefault(k, {"ano": e["ano"], "texto": ind["texto"], "parlamentar_id": ind.get("id"),
+                                          "parlamentar_nome": nomes_parl.get(ind.get("id")), "n": 0, "empenhado": 0, "pago": 0, "_autores": set()})
+            r["n"] += 1; r["empenhado"] += e["empenhado"]; r["pago"] += e["pago"]; r["_autores"].add(e["autor_nome"])
+    lista = []
+    for ano in anos:
+        do_ano = sorted((r for r in ranking.values() if r["ano"] == ano), key=lambda r: -r["empenhado"])
+        escolhidos = do_ano[:500] + [r for r in do_ano[500:] if r["natureza"] == "privada"][:500]  # privadas além do top 500
+        for r in escolhidos:
+            r["autores"] = len(r.pop("_autores")); r["categorias"] = sorted(c for c in r.pop("_cat") if c)
+            lista.append(_fmt(r))
+    ind_lista = []
+    for r in sorted(indicacoes.values(), key=lambda r: (-r["ano"], -r["empenhado"])):
+        r["autores"] = sorted(r.pop("_autores"))[:10]
+        ind_lista.append(_fmt(r))
+    cob = []
+    for c in sorted(cobertura.values(), key=lambda c: -c["ano"]):
+        cob.append({"ano": c["ano"], "emendas": c["emendas"], "com_favorecido": c["com_favorecido"],
+                    "pct_valor": round(100 * c["empenhado_com_favorecido"] / c["empenhado"], 1) if c["empenhado"] else 0})
+    out["favorecidos"] = {"ranking": lista, "indicacoes": ind_lista, "cobertura": cob}
+    meta["favorecidos_pendentes"] = con.execute(
+        "SELECT COUNT(DISTINCT d.codigo_doc) FROM documentos d LEFT JOIN favorecidos f ON f.documento = d.codigo_doc "
+        "WHERE d.fase LIKE 'Empenho%' AND d.codigo_doc <> '' AND f.documento IS NULL").fetchone()[0]
+    meta["cobertura_favorecidos"] = cob
     out["meta"] = meta
     for chave, dados in out.items():
         with open(os.path.join(SAIDA, f"{chave}.json"), "w", encoding="utf-8") as f:
@@ -135,12 +234,21 @@ def run():
                 u["n"] += 1
                 for k in ("empenhado", "liquidado", "pago"):
                     u[k] += l[k]
+        for l in linhas:
+            d = favs.get(l["codigo"].split("~")[0]) or {}
+            l["favorecido_cnpj"] = " | ".join(f["cnpj"] for f in d.get("f", []))
+            l["favorecido_nome"] = " | ".join(f["nome"] or "" for f in d.get("f", []))
+            l["indicado_por"] = (d.get("ind") or {}).get("texto", "")
         cols = list(linhas[0].keys())
         with open(os.path.join(SAIDA, f"emendas_{ano}.csv"), "w", encoding="utf-8", newline="") as f:
             w = csv.DictWriter(f, fieldnames=cols, extrasaction="ignore")
             w.writeheader(); w.writerows(linhas)
         with open(os.path.join(SAIDA, f"emendas_{ano}.json"), "w", encoding="utf-8") as f:  # compacto: o site lê este
-            json.dump([{k: v for k, v in l.items() if v not in (None, "")} for l in linhas], f, ensure_ascii=False, separators=(",", ":"))
+            json.dump([{k: v for k, v in l.items() if v not in (None, "") and k not in ("favorecido_cnpj", "favorecido_nome", "indicado_por")}
+                       for l in linhas], f, ensure_ascii=False, separators=(",", ":"))
+        bases = {l["codigo"].split("~")[0] for l in linhas}
+        with open(os.path.join(SAIDA, f"favorecidos_{ano}.json"), "w", encoding="utf-8") as f:  # lido pela página da emenda
+            json.dump({b: favs[b] for b in sorted(bases) if b in favs}, f, ensure_ascii=False, separators=(",", ":"))
     destinos = [dict(ano=a, base=b, uf=u, **{k: round(v, 2) if k != "n" else v for k, v in d.items()}) for (a, b, u), d in sorted(ufs.items())]
     for l in destinos:
         l["pct_pago"] = round(min(100.0, 100 * l["pago"] / l["empenhado"]), 1) if l["empenhado"] else 0

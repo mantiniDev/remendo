@@ -35,6 +35,9 @@ const lnkPa = (id, ano) => `parlamentar.html?id=${encodeURIComponent(id)}&ano=${
 const autorHtml = e => e.parlamentar_id
   ? `<a href="${lnkPa(e.parlamentar_id, e.ano)}">${esc(e.parlamentar_nome || e.autor_nome)}</a>`
   : esc(e.autor_nome) + (e.categoria !== 'individual' ? ` <span class="mu sm">(${esc(CAT[e.categoria] || '')})</span>` : '');
+const NAT = { privada: 'Entidade privada', publica: 'Ente ou fundo público', direta: 'Aplicação direta da União' };
+const lnkDoc = d => `https://portaldatransparencia.gov.br/busca?termo=${encodeURIComponent(String(d || '').replace(/\D/g, ''))}`;
+const favorecidosAno = a => J(`favorecidos_${a}.json`).catch(() => ({}));  // arquivo novo: some antes da 1ª carga
 const bar = p => `<div class="bar" role="img" aria-label="${esc(pct(p))} pago"><i style="width:${Math.max(0, Math.min(100, p || 0))}%"></i></div>`;
 const wait = () => { app.innerHTML = '<p class="mu m">Carregando…</p>'; };
 const emendasAno = a => J(`emendas_${a}.json`);
@@ -55,7 +58,7 @@ function setAno(a) {
 
 /* ---------- topo e rodapé ---------- */
 const NAV = [['index.html', 'Início', 'home'], ['parlamentares.html', 'Parlamentares', 'parlamentares'], ['emendas.html', 'Emendas', 'emendas'],
-  ['rankings.html', 'Rankings', 'rankings'], ['areas.html', 'Áreas', 'areas'], ['partidos.html', 'Partidos', 'partidos'], ['mapa.html', 'Mapa', 'mapa'], ['metodologia.html', 'Metodologia', 'metodologia']];
+  ['rankings.html', 'Rankings', 'rankings'], ['favorecidos.html', 'Quem recebe', 'favorecidos'], ['areas.html', 'Áreas', 'areas'], ['partidos.html', 'Partidos', 'partidos'], ['mapa.html', 'Mapa', 'mapa'], ['metodologia.html', 'Metodologia', 'metodologia']];
 function shell(anos, ano, meta) {
   const nav = NAV.map(([h, t, k]) => `<a href="${h}?ano=${ano}"${k === PAGE || (k === 'parlamentares' && PAGE === 'parlamentar') || (k === 'emendas' && PAGE === 'emenda') ? ' aria-current="page"' : ''}>${t}</a>`).join('');
   document.getElementById('top').innerHTML = `<div class="w top"><a class="logo" href="index.html?ano=${ano}" aria-label="Remendo, início">remendo</a>
@@ -260,8 +263,21 @@ pages.emenda = async ({ ano }) => {
     <dt>Ano</dt><dd>${e.ano}</dd>
     <dt>Documentos</dt><dd>${e.n_documentos ? `${nf0.format(e.n_documentos)} documentos de empenho, liquidação e pagamento no Portal` : 'ainda não carregados'}</dd></dl>
     <p class="sm mu" style="margin:14px 0 0">Fonte oficial: <a href="https://portaldatransparencia.gov.br/emendas" rel="noopener">Portal da Transparência</a> — procure pelo código <span class="m">${esc(e.codigo.split('~')[0])}</span>. Viu algo errado? <a href="${REPO}/issues/new" rel="noopener">Corrigir um dado</a>.</p></div></section>
+  <section id="fav"></section>
   ${irmas.length ? `<section><h2>Outras linhas com o mesmo código</h2><p class="mu">A fonte divide uma mesma emenda em mais de uma linha (por exemplo, uma parte “transferência especial” e outra “finalidade definida”).</p><div id="t"></div></section>` : ''}</div>`;
   if (irmas.length) dataTable(document.getElementById('t'), colsEmendas, irmas, { sort: 5 });
+  const F = (await favorecidosAno(a))[e.codigo.split('~')[0]];
+  const box = document.getElementById('fav');
+  if (!F || !F.f || !F.f.length) {
+    box.innerHTML = `<h2>Quem recebeu</h2><p class="mu">${e.n_documentos ? 'O favorecido dos empenhos desta emenda ainda não foi consultado. A carga é feita aos poucos, todos os dias.' : 'Sem empenhos carregados.'}</p>`;
+    return;
+  }
+  const fundo = F.f.some(f => /^FUNDO (MUNICIPAL|ESTADUAL|NACIONAL)/i.test(f.nome || ''));
+  box.innerHTML = `<h2>Quem recebeu</h2><div class="p">
+    ${F.f.map(f => `<div class="row"><span>${esc(f.nome || '—')}<small>${esc(f.cnpj)}${f.uf ? ` · ${esc(f.uf)}` : ''} · ${esc(NAT[f.natureza] || f.modalidade || '')} · <a href="${lnkDoc(f.cnpj)}" rel="noopener">ver no Portal</a></small></span><span class="v">${money(f.valor)}</span></div>`).join('')}
+    ${F.cnes ? `<p class="sm" style="margin:12px 0 0">Estabelecimento de saúde citado no empenho: CNES <span class="m">${F.cnes.map(esc).join(', ')}</span>.</p>` : ''}
+    ${F.ind ? `<p class="sm" style="margin:12px 0 0">Indicação citada no empenho: <b>${F.ind.id ? `<a href="${lnkPa(F.ind.id, a)}">${esc(F.ind.texto)}</a>` : esc(F.ind.texto)}</b>.</p>` : ''}
+    <p class="sm mu" style="margin:12px 0 0">Favorecido e valor vêm dos <b>empenhos</b> (o valor inclui reforços e desconta anulações).${fundo ? ' Quando o favorecido é um fundo de saúde, o dinheiro ainda é repassado pelo fundo a hospitais e serviços; o CNES, quando aparece, indica o estabelecimento.' : ''}${F.ind ? ' A indicação foi lida do texto livre da observação do empenho, não de um campo oficial.' : ''}</p></div>`;
 };
 
 /* ---- Rankings ---- */
@@ -305,6 +321,41 @@ pages.rankings = async ({ ano }) => {
 };
 
 /* ---- Áreas ---- */
+pages.favorecidos = async ({ ano, meta }) => {
+  const D = await J('favorecidos.json').catch(() => null);
+  if (!D) { app.innerHTML = '<div class="w"><div class="box">Os favorecidos ainda não foram carregados. Volte depois da próxima atualização.</div></div>'; return; }
+  const R = D.ranking.filter(r => r.ano === ano), I = D.indicacoes.filter(r => r.ano === ano);
+  const cob = (D.cobertura || []).find(c => c.ano === ano);
+  const nat = qs.get('n') || '';
+  app.innerHTML = `<div class="w"><h1 style="font-size:clamp(30px,5vw,48px)">Quem recebe, em ${ano}</h1>${anoParcial(ano)}
+  <p class="lede">Para onde foi o dinheiro: o favorecido de cada empenho (prefeitura, fundo de saúde, governo estadual, entidade privada…), não só a cidade.</p>
+  ${cob ? `<p class="nota">Favorecido já identificado em <b>${nf0.format(cob.com_favorecido)}</b> de ${nf0.format(cob.emendas)} emendas (${pct(cob.pct_valor)} do valor empenhado).${meta.favorecidos_pendentes ? ` Faltam ${nf0.format(meta.favorecidos_pendentes)} empenhos, consultados aos poucos a cada atualização.` : ''}</p>` : ''}
+  <p class="sm mu">Quando uma emenda tem mais de um favorecido, o valor é dividido na proporção dos empenhos. Fundos de saúde repassam o recurso a hospitais e serviços; o nome do fundo é genérico, o CNPJ identifica de qual município ou estado ele é.</p>
+  <div class="tabs" role="group" aria-label="Natureza">${[['', 'Todos'], ['privada', 'Entidades privadas'], ['publica', 'Entes e fundos públicos'], ['direta', 'Aplicação direta']].map(([k, t]) => `<button type="button" aria-pressed="${k === nat}" data-n="${k}">${t}</button>`).join('')}</div>
+  <form class="fl" id="f"><label>Buscar<input type="search" id="q" placeholder="Nome, CNPJ ou UF"></label></form><div id="t"></div>
+  <section><h2>Indicações em emendas de comissão e bancada</h2>
+  <p class="mu">Emendas de comissão e de bancada não têm um autor individual. Às vezes a observação do empenho cita quem indicou (ex.: “da senadora …”). O Remendo lê esse texto livre; pode haver erros e muitas emendas não trazem essa informação.</p><div id="ti"></div></section></div>`;
+  app.querySelectorAll('[data-n]').forEach(b => b.onclick = () => { const p = new URLSearchParams(location.search); p.set('n', b.dataset.n); location.search = p.toString(); });
+  const base = R.filter(r => !nat || r.natureza === nat);
+  const tb = dataTable(document.getElementById('t'), [
+    { label: 'Favorecido', html: r => `<span>${esc(r.nome || '—')}<small class="m" style="display:block;overflow-wrap:anywhere">${esc(r.cnpj)}</small></span>`, val: r => r.nome || '' },
+    { label: 'UF', html: r => esc(r.uf || '—'), val: r => r.uf || '' },
+    { label: 'Natureza', html: r => esc(NAT[r.natureza] || '—'), val: r => r.natureza || '' },
+    { label: 'Emendas', html: r => nf0.format(r.n), val: r => r.n, num: true },
+    { label: 'Autores', html: r => nf0.format(r.autores), val: r => r.autores, num: true },
+    { label: 'Empenhado', html: r => money(r.empenhado), val: r => r.empenhado, num: true },
+    { label: 'Pago', html: r => money(r.pago), val: r => r.pago, num: true },
+    { label: '', html: r => `<a href="${lnkDoc(r.cnpj)}" rel="noopener" class="sm">Portal</a>`, val: r => r.cnpj }], base, { sort: 5, size: 50 });
+  const q = document.getElementById('q');
+  q.oninput = () => { const t = norm(q.value); tb.set(base.filter(r => !t || norm(`${r.nome} ${r.cnpj} ${r.uf}`).includes(t))); };
+  document.getElementById('f').addEventListener('submit', e => e.preventDefault());
+  dataTable(document.getElementById('ti'), [
+    { label: 'Indicação (texto do empenho)', html: r => r.parlamentar_id ? `<a href="${lnkPa(r.parlamentar_id, ano)}">${esc(r.parlamentar_nome || r.texto)}</a>` : esc(r.texto), val: r => r.parlamentar_nome || r.texto },
+    { label: 'Emendas de', html: r => esc(r.autores.join('; ')), val: r => r.autores.join(' ') },
+    { label: 'Emendas', html: r => nf0.format(r.n), val: r => r.n, num: true },
+    { label: 'Empenhado', html: r => money(r.empenhado), val: r => r.empenhado, num: true },
+    { label: 'Pago', html: r => money(r.pago), val: r => r.pago, num: true }], I, { sort: 3, size: 30, empty: 'Nenhuma indicação encontrada nas observações deste ano.' });
+};
 pages.areas = async ({ ano }) => {
   const A = (await J('areas.json')).filter(a => a.ano === ano).sort((a, b) => b.empenhado - a.empenhado); const max = Math.max(...A.map(a => a.empenhado), 1);
   app.innerHTML = `<div class="w"><h1 style="font-size:clamp(30px,5vw,48px)">Por área, em ${ano}</h1>${anoParcial(ano)}
@@ -382,6 +433,8 @@ pages.metodologia = async ({ meta, resumo, ano }) => {
   <p>O corte de 180 dias é uma escolha nossa, para dar um critério claro.</p>
   <h2>Vínculo com o parlamentar</h2>
   <p>A fonte informa o nome do autor, não um identificador. Vinculamos por nome (apelido ou nome civil), ignorando acentos, pontos e títulos. Se houver mais de um candidato, não vinculamos.${v ? ` Em ${ano}, <b>${pct(v.pct_valor_vinculado)}</b> do valor das emendas individuais está vinculado a um parlamentar.` : ''}</p>
+  <h2>Quem recebeu</h2><p>O destino informado na lista de emendas é só o local (cidade, estado, “Nacional”). Para saber <b>quem recebeu</b>, consultamos o detalhe de cada <b>empenho</b> no Portal da Transparência: CNPJ e nome do favorecido, modalidade (fundo a fundo, transferência a municípios, entidade privada…) e a observação do documento. Usamos só o empenho porque, na liquidação e no pagamento, o favorecido pode ser um intermediário (por exemplo, o banco num pagamento em lote) e o valor é o do lote inteiro.</p>
+  <ul><li>Fundos de saúde repassam o dinheiro a hospitais e serviços. Quando a observação cita um <b>CNES</b> (código do estabelecimento), mostramos.</li><li>Em emendas de comissão e bancada, a observação às vezes cita quem indicou. Isso é texto livre: mostramos como “indicação citada no empenho”, não como autoria oficial.</li><li>Na transferência especial (“Pix”), o favorecido é o próprio município ou estado; o uso final fica no plano de ação do Transferegov.</li></ul>
   <h2>Partidos</h2><p>O partido é o <b>atual</b> do parlamentar, não necessariamente o da época da emenda.</p>
   <h2>Limites que você precisa conhecer</h2><ul><li>O ano corrente está em andamento: o percentual pago ainda vai subir.</li><li>Uma mesma emenda pode vir dividida em mais de uma linha; mantemos cada linha.</li><li>Pagamento depende do Executivo. Valor pendente não é, por si só, falha do parlamentar.</li><li>${meta.carga_parcial ? `Agora: faltam os documentos de ${nf0.format(meta.emendas_sem_documentos)} emendas.` : 'Todos os documentos disponíveis foram carregados.'}</li></ul>
   <h2>Errou algum dado?</h2><p><a href="${REPO}/issues/new" rel="noopener">Abra um aviso</a> com o código da emenda e o que está errado. O código-fonte também está no <a href="${REPO}" rel="noopener">GitHub</a>.</p></div>`;
@@ -394,13 +447,13 @@ pages.dados = async ({ anos, ano }) => {
   <p class="mu">Os mesmos arquivos que alimentam o site. Pode usar, cruzar e republicar: cite “Remendo (remendo.com.br), com dados do Portal da Transparência”. Valores em reais.</p>
   <div class="tw"><table><thead><tr><th>Arquivo</th><th>O que é</th></tr></thead><tbody>
   ${anos.map(a => arq(`emendas_${a}.csv`, `Todas as emendas de ${a}, uma por linha (planilha).`) + arq(`emendas_${a}.json`, `As mesmas emendas de ${a} em JSON.`)).join('')}
-  ${arq('resumo.json', 'Totais por ano.')}${arq('categorias.json', 'Totais por tipo de emenda (individual, bancada, comissão…).')}${arq('areas.json', 'Totais por área (função orçamentária).')}${arq('partidos.json', 'Totais por partido (emendas individuais).')}${arq('parlamentares.json', 'Totais por parlamentar e ano.')}${arq('ufs.json', 'Totais por estado (do parlamentar e do destino).')}${arq('rankings.json', 'Listas usadas na página Rankings.')}${arq('nao_vinculados.json', 'Autores que não foram ligados a um parlamentar.')}${arq('meta.json', 'Data da atualização e situação da carga.')}</tbody></table></div>
+  ${arq('resumo.json', 'Totais por ano.')}${arq('categorias.json', 'Totais por tipo de emenda (individual, bancada, comissão…).')}${arq('areas.json', 'Totais por área (função orçamentária).')}${arq('partidos.json', 'Totais por partido (emendas individuais).')}${arq('parlamentares.json', 'Totais por parlamentar e ano.')}${arq('ufs.json', 'Totais por estado (do parlamentar e do destino).')}${arq('rankings.json', 'Listas usadas na página Rankings.')}${arq('favorecidos.json', 'Quem recebe: favorecidos por ano e indicações citadas nos empenhos.')}${anos.map(a => arq(`favorecidos_${a}.json`, `Favorecidos de cada emenda de ${a} (pelo código).`)).join('')}${arq('nao_vinculados.json', 'Autores que não foram ligados a um parlamentar.')}${arq('meta.json', 'Data da atualização e situação da carga.')}</tbody></table></div>
   <section><h2>Campos das emendas</h2><dl class="dd">
    <dt>codigo</dt><dd>código da emenda no Portal (um “~2” indica outra linha do mesmo código)</dd><dt>ano, numero</dt><dd>ano e número da emenda</dd>
    <dt>tipo, categoria</dt><dd>tipo original e agrupamento (individual, bancada, comissão, relator)</dd><dt>autor_nome, parlamentar_id</dt><dd>autor e identificador (C- = Câmara, S- = Senado)</dd>
    <dt>partido, uf</dt><dd>do parlamentar</dd><dt>localidade, funcao, subfuncao</dt><dd>destino e área</dd>
    <dt>empenhado, liquidado, pago, resto_pago</dt><dd>valores em reais; pago inclui restos a pagar pagos</dd><dt>pct_pago, nao_pago</dt><dd>derivados</dd>
-   <dt>status, ultima_mov</dt><dd>situação e data do último documento</dd><dt>data_empenho, data_liquidacao, data_pagamento</dt><dd>datas dos documentos</dd></dl></section></div>`;
+   <dt>status, ultima_mov</dt><dd>situação e data do último documento</dd><dt>data_empenho, data_liquidacao, data_pagamento</dt><dd>datas dos documentos</dd><dt>favorecido_cnpj, favorecido_nome</dt><dd>só no CSV: quem recebeu, segundo os empenhos (vários separados por “ | ”)</dd><dt>indicado_por</dt><dd>só no CSV: indicação citada na observação do empenho (comissão e bancada)</dd></dl></section></div>`;
 };
 
 /* ---------- início ---------- */

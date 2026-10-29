@@ -84,3 +84,4 @@ dl.dd{display:grid;grid-template-columns:max-content 1fr;gap:6px 18px;font-size:
  td>*{text-align:right}
 }
 @media print{.top nav,.ys,.sf,footer .fr a{display:none}}
+@media (max-width:560px){dl.dd{grid-template-columns:1fr;gap:2px}dl.dd dd{margin-bottom:8px;overflow-wrap:anywhere}}
