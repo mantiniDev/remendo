@@ -107,3 +107,21 @@ têm os documentos rebaixados. Para outro servidor, basta um `cron` chamando `py
   | DAYANY BITTENCOURT | C-220659 | Dayany Bittencourt |
   | RAFAEL BENTO | C-233594 | Rafael Fera (assumiu em 2025 no lugar de Lebrão) |
   | MARCIVANIA FLEXA | C-160641 | Professora Marcivânia (assumiu em 2025 no lugar de Maria Goreth) |
+
+## Atualização 6: cota parlamentar e cruzamento com emendas
+- `cota.py`: a cada execução, recarrega por inteiro a cota de cada ano (os mesmos anos das emendas).
+  - Deputados: arquivo anual da Câmara (`camara.leg.br/cotas/Ano-AAAA.csv.zip`), vinculado pelo `ideCadastro`, que é o id da API (`C-…`). Despesas de lideranças (sem deputado) ficam de fora.
+  - Senadores: `adm.senado.gov.br/adm-dadosabertos/api/v1/senadores/despesas_ceaps/AAAA`, vinculado pelo `codSenador` (`S-…`).
+  - Valor: o líquido ou reembolsado, em centavos; negativo é estorno. O CNPJ/CPF é guardado só com dígitos.
+  - Se uma fonte falhar, o ano mantém os dados anteriores e a execução segue. O log avisa quando há ids sem cadastro na tabela de parlamentares.
+  - Roda antes das emendas, para não ficar sem tempo.
+- `export.py`:
+  - `cota_{ano}.json`: por parlamentar, o total, os 12 meses, os tipos de despesa e os 15 maiores fornecedores; além disso, os tipos de despesa por Casa e os 300 maiores fornecedores do ano.
+  - `cruzamento.json`: CNPJ (14 dígitos, idêntico) que aparece como fornecedor da cota **e** como favorecido de emenda do **mesmo** parlamentar, com até 10 documentos de cada lado (nota fiscal e empenho). Não compara nomes e deixa CPF de fora.
+- Site:
+  - Seção "Cota parlamentar" na página do parlamentar, com gasto por mês, por tipo e maiores fornecedores.
+  - Seção "Aparece nas duas bases", com o aviso de que os dados são extraídos automaticamente dos sites oficiais, de que coincidência não indica irregularidade e de que tudo precisa de verificação na fonte.
+  - Nova página `cota.html`, com o ranking por Casa, os tipos de despesa e os maiores fornecedores.
+  - Metodologia e Dados abertos atualizados.
+- Limite da cota: varia por estado e não está nessas bases, por isso o site não mostra o percentual usado.
+- `check_cota.py`: conferência das fontes pelo workflow "Conferir campos da API" (`conferir: cota`).

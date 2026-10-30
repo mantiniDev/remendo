@@ -77,6 +77,101 @@ def _partes(fav, empenhado, pago):
         yield f, empenhado * peso, pago * peso
 
 
+def rotulo_tipo(t):
+    """'COMBUSTÍVEIS E LUBRIFICANTES.' -> 'Combustíveis e lubrificantes'; corta o detalhamento longo do Senado."""
+    t = (t or "").strip()
+    if not t or t == "None":
+        return "Não informado"
+    for corte in (", compreendendo", ", inclusive"):
+        t = t.split(corte)[0]
+    t = t.strip().rstrip(".").strip()
+    if t.isupper():
+        t = t.capitalize()
+        for sigla in ("SIGEPA", "RPA"):
+            t = re.sub(rf"\b{sigla.lower()}\b", sigla, t)
+    return t
+
+
+URL_CAMARA = "https://www.camara.leg.br/cota-parlamentar/"
+
+
+def _url_doc(u):
+    return (u if u.startswith("http") else URL_CAMARA + u) if u else None
+
+
+def exporta_cota(con, anos):
+    """cota_{ano}.json: por parlamentar (mês, tipo, maiores fornecedores) e maiores fornecedores do ano."""
+    nomes = {r["id"]: dict(r) for r in con.execute("SELECT id, nome, partido, uf, casa FROM parlamentares")}
+    for ano in anos:
+        P = {}
+        for r in con.execute("SELECT parlamentar_id, MAX(nome) AS nome, MAX(casa) AS casa, mes, SUM(valor) AS v, COUNT(*) AS n "
+                             "FROM cota WHERE ano=? GROUP BY parlamentar_id, mes", (ano,)):
+            info = nomes.get(r["parlamentar_id"], {})
+            p = P.setdefault(r["parlamentar_id"], {"nome": info.get("nome") or r["nome"], "partido": info.get("partido"),
+                                                   "uf": info.get("uf"), "casa": r["casa"], "total": 0, "n": 0,
+                                                   "meses": [0] * 12, "tipos": {}, "fornecedores": []})
+            if 1 <= r["mes"] <= 12:
+                p["meses"][r["mes"] - 1] = REAIS(r["v"])
+            p["total"] += r["v"]; p["n"] += r["n"]
+        for r in con.execute("SELECT parlamentar_id, tipo, SUM(valor) AS v FROM cota WHERE ano=? GROUP BY parlamentar_id, tipo", (ano,)):
+            t = P[r["parlamentar_id"]]["tipos"]
+            k = rotulo_tipo(r["tipo"])
+            t[k] = round(t.get(k, 0) + REAIS(r["v"]), 2)
+        forn = {}
+        for r in con.execute("SELECT parlamentar_id, cnpj, MAX(fornecedor) AS nome, SUM(valor) AS v, COUNT(*) AS n FROM cota "
+                             "WHERE ano=? GROUP BY parlamentar_id, cnpj", (ano,)):
+            forn.setdefault(r["parlamentar_id"], []).append({"cnpj": r["cnpj"], "nome": r["nome"], "valor": REAIS(r["v"]), "n": r["n"]})
+        for pid, lista in forn.items():
+            P[pid]["fornecedores"] = sorted(lista, key=lambda f: -f["valor"])[:15]
+        for p in P.values():
+            p["total"] = REAIS(p["total"])
+        top = [{"cnpj": r["cnpj"], "nome": r["nome"], "valor": REAIS(r["v"]), "n": r["n"], "parlamentares": r["p"]}
+               for r in con.execute("SELECT cnpj, MAX(fornecedor) AS nome, SUM(valor) AS v, COUNT(*) AS n, COUNT(DISTINCT parlamentar_id) AS p "
+                                    "FROM cota WHERE ano=? AND cnpj <> '' GROUP BY cnpj ORDER BY SUM(valor) DESC LIMIT 300", (ano,))]
+        tipos = {}
+        for r in con.execute("SELECT casa, tipo, SUM(valor) AS v FROM cota WHERE ano=? GROUP BY casa, tipo", (ano,)):
+            k = (r["casa"], rotulo_tipo(r["tipo"]))
+            tipos[k] = tipos.get(k, 0) + r["v"]
+        dados = {"ano": ano, "parlamentares": P, "fornecedores": top,
+                 "tipos": [{"casa": c, "tipo": t, "valor": REAIS(v)} for (c, t), v in sorted(tipos.items(), key=lambda kv: -kv[1])]}
+        if not P:
+            continue
+        with open(os.path.join(SAIDA, f"cota_{ano}.json"), "w", encoding="utf-8") as f:
+            json.dump(dados, f, ensure_ascii=False, separators=(",", ":"))
+
+
+def exporta_cruzamento(con):
+    """CNPJ que aparece como fornecedor da cota E como favorecido de emenda do MESMO parlamentar.
+    Só CNPJ completo (14 dígitos), nunca nome; CPF fica de fora. Cada lado leva os documentos para conferência."""
+    emendas_fav = {}
+    for r in con.execute("""SELECT e.parlamentar_id, e.codigo, e.ano, f.cnpj, MAX(f.nome) AS nome,
+              SUM(CASE WHEN f.especie LIKE 'Anula%' THEN -f.valor ELSE f.valor END) AS valor, MIN(f.documento) AS empenho
+            FROM favorecidos f JOIN emendas e ON e.codigo = f.emenda_codigo
+            WHERE e.parlamentar_id IS NOT NULL AND f.erro IS NULL AND f.intermediario = 0 AND f.cnpj IS NOT NULL
+            GROUP BY e.parlamentar_id, e.codigo, f.cnpj"""):
+        cnpj = re.sub(r"\D", "", r["cnpj"])
+        if len(cnpj) == 14:
+            emendas_fav.setdefault((r["parlamentar_id"], cnpj), []).append(
+                {"codigo": r["codigo"], "ano": r["ano"], "favorecido": r["nome"], "valor": REAIS(r["valor"]), "empenho": r["empenho"]})
+    saida = []
+    for r in con.execute("SELECT parlamentar_id, cnpj, MAX(fornecedor) AS nome, SUM(valor) AS v, COUNT(*) AS n, MIN(ano) AS a0, MAX(ano) AS a1 "
+                         "FROM cota WHERE length(cnpj) = 14 GROUP BY parlamentar_id, cnpj"):
+        emds = emendas_fav.get((r["parlamentar_id"], r["cnpj"]))
+        if not emds:
+            continue
+        docs = [{"ano": d["ano"], "data": d["data"], "valor": REAIS(d["valor"]), "documento": d["documento"], "url": _url_doc(d["url"]),
+                 "tipo": rotulo_tipo(d["tipo"]), "casa": d["casa"]}
+                for d in con.execute("SELECT ano, data, valor, documento, url, tipo, casa FROM cota WHERE parlamentar_id=? AND cnpj=? "
+                                     "ORDER BY valor DESC LIMIT 10", (r["parlamentar_id"], r["cnpj"]))]
+        saida.append({"parlamentar_id": r["parlamentar_id"], "cnpj": r["cnpj"], "fornecedor": r["nome"],
+                      "cota": {"valor": REAIS(r["v"]), "n": r["n"], "anos": [r["a0"], r["a1"]], "documentos": docs},
+                      "emendas": sorted(emds, key=lambda x: -x["valor"])[:10],
+                      "emendas_valor": round(sum(x["valor"] for x in emds), 2), "emendas_n": len(emds)})
+    with open(os.path.join(SAIDA, "cruzamento.json"), "w", encoding="utf-8") as f:
+        json.dump(saida, f, ensure_ascii=False, indent=1)
+    return len(saida)
+
+
 def run():
     con = db()
     os.makedirs(SAIDA, exist_ok=True)
@@ -254,4 +349,8 @@ def run():
         l["pct_pago"] = round(min(100.0, 100 * l["pago"] / l["empenhado"]), 1) if l["empenhado"] else 0
     with open(os.path.join(SAIDA, "ufs.json"), "w", encoding="utf-8") as f:
         json.dump(destinos, f, ensure_ascii=False, indent=1)
+    anos_cota = [r[0] for r in con.execute("SELECT DISTINCT ano FROM cota ORDER BY ano")]
+    exporta_cota(con, anos_cota)
+    n = exporta_cruzamento(con)
+    print(f"Cota: {len(anos_cota)} anos exportados; cruzamento cota × emendas: {n} pares parlamentar/CNPJ")
     print(f"Exportado em {SAIDA}/")
