@@ -2,14 +2,23 @@ name: Conferir campos da API
 on:
   workflow_dispatch:
     inputs:
+      conferir:
+        description: "O que conferir"
+        type: choice
+        options: [cota, emendas]
+        default: cota
       ano:
-        description: "Ano das emendas"
+        description: "Ano"
         required: false
-        default: "2024"
+        default: "2025"
       emendas:
-        description: "Quantas emendas (de tipos diferentes) consultar"
+        description: "Emendas: quantas (de tipos diferentes) consultar"
         required: false
         default: "4"
+      deputado:
+        description: "Cota: id de um deputado para testar a API (camara.leg.br/deputados/<id>)"
+        required: false
+        default: "220660"
 permissions:
   contents: read
 jobs:
@@ -24,13 +33,22 @@ jobs:
         with: { python-version: "3.12" }
       - run: pip install -r requirements.txt
       - name: Campos de /emendas, /emendas/documentos e /despesas/documentos
+        if: github.event.inputs.conferir == 'emendas'
         shell: bash   # com pipefail: erro do Python não some atrás do tee
         run: python -u -m remendo_etl.check_fields "$ANO" "$EMENDAS" | tee campos.txt
         env:
           PORTAL_API_KEY: ${{ secrets.PORTAL_API_KEY }}
           ANO: ${{ github.event.inputs.ano }}
           EMENDAS: ${{ github.event.inputs.emendas }}
+      - name: Fontes da cota parlamentar (Câmara e Senado)
+        if: github.event.inputs.conferir == 'cota'
+        shell: bash
+        run: python -u -m remendo_etl.check_cota "$ANO" "$DEPUTADO" | tee campos.txt
+        env:
+          ANO: ${{ github.event.inputs.ano }}
+          DEPUTADO: ${{ github.event.inputs.deputado }}
       - uses: actions/upload-artifact@v4
+        if: always()   # guarda a saída mesmo se o script parar no meio
         with:
           name: campos-api
           path: campos.txt
