@@ -37,7 +37,13 @@ _TITULOS = {"DEP", "DEPUTADO", "DEPUTADA", "SEN", "SENADOR", "SENADORA"}
 _PARL = None
 # Autor (como vem no Portal, normalizado) -> id do parlamentar, para quem usa nome diferente na Câmara/Senado.
 # Use só ids conferidos no site da Câmara (camara.leg.br/deputados/<id>) ou do Senado.
-APELIDOS = {}
+# A chave é o nome como `candidatos` compara: sem acento, sem pontos/títulos e só o texto antes do "(".
+APELIDOS = {
+    "YURY DO PAREDAO": "C-220660",
+    "DAYANY BITTENCOURT": "C-220659",
+    "RAFAEL BENTO": "C-233594",       # "Rafael Fera"; assumiu em 2025 no lugar de Lebrão (RO)
+    "MARCIVANIA FLEXA": "C-160641",   # "Professora Marcivânia"; assumiu em 2025 no lugar de Maria Goreth (AP)
+}
 
 
 def _limpa(s):
@@ -92,6 +98,10 @@ def vincular_pendentes(con):
     """Tenta de novo os autores individuais sem vínculo (a lista de parlamentares pode ter mudado)."""
     global _PARL
     _PARL = None
+    ids = {i for i, _, _ in _parl(con)}
+    for autor, pid in APELIDOS.items():
+        if pid not in ids:
+            log(f"AVISO: apelido {autor!r} aponta para {pid}, que não está na tabela de parlamentares; ficou sem vínculo.")
     n = 0
     for r in con.execute("SELECT codigo, autor_norm FROM emendas WHERE parlamentar_id IS NULL AND tipo LIKE '%Individual%'").fetchall():
         pid = achar_parlamentar(con, r["autor_norm"])

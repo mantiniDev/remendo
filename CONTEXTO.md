@@ -27,9 +27,9 @@ Segredo necessário: `PORTAL_API_KEY`.
 
 - Vínculo das individuais: 98,5–98,9% do valor em 2024–2026. Seis autores (Fabio Garcia, Waldemar Oliveira,
   Rodolfo Nogueira, Eduardo Velloso, Bebeto, Reginete Bispo) ficavam ambíguos com homônimos `S-…` vindos dos
-  suplentes da lista da legislatura do Senado; agora suplentes sem exercício são ignorados. Sem candidato
-  (nome diferente na Câmara): Yury do Paredão, Dayany Bittencourt, Rafael Bento, Marcivania Flexa. Para esses,
-  preencher `APELIDOS` em `remendo_etl/emendas.py` com ids conferidos.
+  suplentes da lista da legislatura do Senado; agora suplentes sem exercício são ignorados. Os quatro sem
+  candidato (nome diferente na Câmara: Yury do Paredão, Dayany Bittencourt, Rafael Bento, Marcivania Flexa) estão
+  em `APELIDOS`, em `remendo_etl/emendas.py`, com ids conferidos no site da Câmara.
 - Conferir no navegador se o status "parada" está preenchido e se "Enforce HTTPS" está marcado no Pages.
 - Favorecidos: são ~257 mil empenhos (~13 por emenda) a ~110 consultas/min, ~30 mil por execução. A fila consulta
   primeiro um empenho de cada emenda sem favorecido (~1 execução para cobrir quase todas) e depois o resto
