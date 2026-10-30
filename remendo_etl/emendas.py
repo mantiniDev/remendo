@@ -203,14 +203,25 @@ def carregar_favorecido(con, emenda_codigo, documento):
 
 
 def carregar_favorecidos(con, anos, limite):
-    """Um pedido por empenho ainda sem detalhe. Retomável: o que não couber no tempo fica para a próxima execução."""
+    """Um pedido por empenho ainda sem detalhe. Retomável: o que não couber no tempo fica para a próxima execução.
+    Ordem: primeiro um empenho (o mais antigo) de cada emenda que ainda não tem favorecido, para cobrir todas as
+    emendas logo; depois os demais empenhos (reforços, outros favorecidos), que só refinam a divisão do valor."""
     marcas = ",".join("?" * len(anos))
-    fila = [(r["emenda_codigo"], r["codigo_doc"]) for r in con.execute(
-        f"""SELECT DISTINCT d.emenda_codigo, d.codigo_doc FROM documentos d JOIN emendas e ON e.codigo = d.emenda_codigo
+    pendentes = [(r["emenda_codigo"], r["codigo_doc"]) for r in con.execute(
+        f"""SELECT d.emenda_codigo, d.codigo_doc, MIN(d.data) AS data FROM documentos d JOIN emendas e ON e.codigo = d.emenda_codigo
             LEFT JOIN favorecidos f ON f.documento = d.codigo_doc
             WHERE e.ano IN ({marcas}) AND d.fase LIKE 'Empenho%' AND d.codigo_doc <> '' AND f.documento IS NULL
-            ORDER BY e.ano DESC, e.empenhado DESC""", anos)]
-    log(f"Empenhos sem favorecido a consultar: {len(fila)}")
+            GROUP BY d.emenda_codigo, d.codigo_doc
+            ORDER BY e.ano DESC, e.empenhado DESC, d.emenda_codigo, data""", anos)]
+    com_favorecido = {r[0] for r in con.execute("SELECT DISTINCT emenda_codigo FROM favorecidos WHERE erro IS NULL AND cnpj IS NOT NULL")}
+    primeiros, vistas = [], set()
+    for emenda, doc in pendentes:
+        if emenda not in com_favorecido and emenda not in vistas:
+            vistas.add(emenda)
+            primeiros.append((emenda, doc))
+    escolhidos = set(primeiros)
+    fila = primeiros + [p for p in pendentes if p not in escolhidos]
+    log(f"Empenhos sem favorecido a consultar: {len(fila)} ({len(primeiros)} são o primeiro de emendas ainda sem favorecido)")
     t0, seguidas = time.monotonic(), 0
     for i, (emenda, doc) in enumerate(fila, 1):
         if limite and time.monotonic() >= limite:
