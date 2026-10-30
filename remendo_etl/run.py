@@ -1,6 +1,6 @@
 """Uso: python -m remendo_etl.run [--anos 2023 2024] [--sem-documentos] [--max-minutos 300]"""
 import argparse, datetime as dt, time
-from . import emendas, export, parlamentares
+from . import cota, emendas, export, parlamentares
 
 
 def main():
@@ -13,6 +13,7 @@ def main():
     a = ap.parse_args()
     limite = time.monotonic() + a.max_minutos * 60 if a.max_minutos else None
     parlamentares.run()
+    cota.run(a.anos)  # download rápido; antes das emendas para não ficar sem tempo
     emendas.run(a.anos, com_documentos=not a.sem_documentos, limite=limite)
     export.run()
 

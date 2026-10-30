@@ -42,6 +42,14 @@ CREATE TABLE IF NOT EXISTS favorecidos(   -- detalhe de cada empenho (/despesas/
 CREATE INDEX IF NOT EXISTS ix_fav_em ON favorecidos(emenda_codigo);
 CREATE INDEX IF NOT EXISTS ix_fav_cnpj ON favorecidos(cnpj);
 
+CREATE TABLE IF NOT EXISTS cota(   -- cota parlamentar: CEAP (Câmara) e CEAPS (Senado), uma linha por documento
+  id INTEGER PRIMARY KEY AUTOINCREMENT, casa TEXT, ano INTEGER, mes INTEGER, parlamentar_id TEXT, nome TEXT,
+  tipo TEXT, fornecedor TEXT, cnpj TEXT,   -- cnpj: só dígitos (14 = CNPJ, 11 = CPF)
+  valor INTEGER, data TEXT, documento TEXT, url TEXT   -- valor em centavos (líquido/reembolsado; negativo = estorno)
+);
+CREATE INDEX IF NOT EXISTS ix_cota_parl ON cota(parlamentar_id, ano);
+CREATE INDEX IF NOT EXISTS ix_cota_cnpj ON cota(cnpj);
+
 CREATE TABLE IF NOT EXISTS etl_runs(
   id INTEGER PRIMARY KEY AUTOINCREMENT, fonte TEXT, inicio TEXT, fim TEXT,
   registros INTEGER, status TEXT, erro TEXT

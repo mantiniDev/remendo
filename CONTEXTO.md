@@ -35,11 +35,10 @@ Segredo necessário: `PORTAL_API_KEY`.
   primeiro um empenho de cada emenda sem favorecido (~1 execução para cobrir quase todas) e depois o resto
   (~6 dias). Acompanhar no log `favorecidos: N/M empenhos` e em `meta.json` (`favorecidos_pendentes`,
   `cobertura_favorecidos`).
-- Cota parlamentar (em andamento): conferir as fontes com o workflow "Conferir campos da API" (`conferir: cota`),
-  depois a carga (CEAP da Câmara pelo arquivo anual, vínculo pelo id; CEAPS do Senado pelo nome) e a seção na
-  página do parlamentar.
-- Cruzamento cota × emendas (depois da cota): fornecedores da cota que também são favorecidos de emendas do mesmo
-  parlamentar. Regras combinadas com o autor do projeto:
+- Cota parlamentar: feita (Atualização 6 do README). Fontes conferidas em 30/10/2026: o CSV anual da Câmara traz
+  `ideCadastro` (o JSON anual não traz); a API administrativa do Senado traz `codSenador`. Falta o limite mensal
+  por UF (não está nas bases). Verba de gabinete, pessoal, imóvel funcional etc.: ainda sem fonte estruturada.
+- Cruzamento cota × emendas: feito, na página do parlamentar. Regras combinadas com o autor do projeto:
   - casar só por CNPJ completo e idêntico, nunca por nome; CPF fica de fora (vem mascarado no Portal);
   - cada linha com link para a nota fiscal (Câmara/Senado) e para o empenho (Portal da Transparência);
   - aviso visível na seção, na página e na metodologia: os dados são extraídos automaticamente dos sites do
