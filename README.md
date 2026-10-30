@@ -96,3 +96,14 @@ têm os documentos rebaixados. Para outro servidor, basta um `cron` chamando `py
   - CNES e indicação ("DA SENADORA FULANA", "PELO DEPUTADO …") são lidos do texto livre da observação. A indicação só é extraída em emendas de comissão, bancada ou relator.
 - Site: seção "Quem recebeu" na página da emenda e nova página `favorecidos.html` ("Quem recebe"), com filtro por natureza (entidade privada, ente ou fundo público, aplicação direta).
 - Workflow manual "Conferir campos da API" (`check_fields.yml`): mostra os campos reais dos três endpoints.
+
+## Atualização 5: fila de favorecidos e apelidos
+- Fila de favorecidos: são cerca de 257 mil empenhos (uns 13 por emenda), a cerca de 110 consultas por minuto, ou uns 30 mil por execução. A fila consulta primeiro o empenho mais antigo de cada emenda que ainda não tem favorecido. Depois vêm os demais, que refinam a divisão do valor quando a emenda tem mais de um favorecido.
+- Apelidos (`APELIDOS` em `remendo_etl/emendas.py`): servem para autores cujo nome no Portal é diferente do nome na Câmara ou no Senado. A chave é o nome normalizado como `candidatos` compara (sem acento, sem pontos e títulos, só o texto antes do "("). O valor é o id do parlamentar. Use só ids conferidos no site da Casa (`camara.leg.br/deputados/<id>`). Se o id não estiver na tabela de parlamentares, a revisão diária avisa no log e não vincula.
+
+  | Autor no Portal | Id | Nome na Câmara |
+  |---|---|---|
+  | YURY DO PAREDAO | C-220660 | Yury do Paredão |
+  | DAYANY BITTENCOURT | C-220659 | Dayany Bittencourt |
+  | RAFAEL BENTO | C-233594 | Rafael Fera (assumiu em 2025 no lugar de Lebrão) |
+  | MARCIVANIA FLEXA | C-160641 | Professora Marcivânia (assumiu em 2025 no lugar de Maria Goreth) |
