@@ -153,6 +153,8 @@ def exporta_cruzamento(con):
         if len(cnpj) == 14:
             emendas_fav.setdefault((r["parlamentar_id"], cnpj), []).append(
                 {"codigo": r["codigo"], "ano": r["ano"], "favorecido": r["nome"], "valor": REAIS(r["valor"]), "empenho": r["empenho"]})
+    # contexto: quantos parlamentares pagam o mesmo fornecedor pela cota (concessionárias de luz e água aparecem para muitos)
+    usam = {r[0]: r[1] for r in con.execute("SELECT cnpj, COUNT(DISTINCT parlamentar_id) FROM cota WHERE length(cnpj) = 14 GROUP BY cnpj")}
     saida = []
     for r in con.execute("SELECT parlamentar_id, cnpj, MAX(fornecedor) AS nome, SUM(valor) AS v, COUNT(*) AS n, MIN(ano) AS a0, MAX(ano) AS a1 "
                          "FROM cota WHERE length(cnpj) = 14 GROUP BY parlamentar_id, cnpj"):
@@ -166,7 +168,8 @@ def exporta_cruzamento(con):
         saida.append({"parlamentar_id": r["parlamentar_id"], "cnpj": r["cnpj"], "fornecedor": r["nome"],
                       "cota": {"valor": REAIS(r["v"]), "n": r["n"], "anos": [r["a0"], r["a1"]], "documentos": docs},
                       "emendas": sorted(emds, key=lambda x: -x["valor"])[:10],
-                      "emendas_valor": round(sum(x["valor"] for x in emds), 2), "emendas_n": len(emds)})
+                      "emendas_valor": round(sum(x["valor"] for x in emds), 2), "emendas_n": len(emds),
+                      "outros_parlamentares": usam.get(r["cnpj"], 1) - 1})
     with open(os.path.join(SAIDA, "cruzamento.json"), "w", encoding="utf-8") as f:
         json.dump(saida, f, ensure_ascii=False, indent=1)
     return len(saida)

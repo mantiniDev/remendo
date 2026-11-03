@@ -44,6 +44,9 @@ Segredo necessário: `PORTAL_API_KEY`.
   - aviso visível na seção, na página e na metodologia: os dados são extraídos automaticamente dos sites do
     governo, coincidência não indica irregularidade e toda informação precisa de verificação confirmada na fonte
     oficial antes de qualquer uso;
-  - linguagem neutra ("aparece nas duas bases"), sem rankings de "suspeitos".
+  - linguagem neutra ("aparece nas duas bases"), sem rankings de "suspeitos";
+  - não esconder pares (prefeituras, governos e emendas anuladas continuam); para fornecedores comuns, mostrar
+    quantos outros parlamentares também os pagam pela cota (decidido em 02/11/2026, após análise dos ~96 pares:
+    ~52 prefeituras/governos, ~22 concessionárias, ~19 hotéis com CNPJ da prefeitura por erro da fonte, 4 empresas).
 - Ideias: valor indicado (SIOP), página por município e por favorecido (CNPJ), imagens de compartilhamento por
   parlamentar, cruzar CNES com o cadastro de estabelecimentos de saúde.

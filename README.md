@@ -125,3 +125,8 @@ têm os documentos rebaixados. Para outro servidor, basta um `cron` chamando `py
   - Metodologia e Dados abertos atualizados.
 - Limite da cota: varia por estado e não está nessas bases, por isso o site não mostra o percentual usado.
 - `check_cota.py`: conferência das fontes pelo workflow "Conferir campos da API" (`conferir: cota`).
+
+## Atualização 7: contexto no cruzamento cota × emendas
+- `cruzamento.json` ganha `outros_parlamentares`: quantos outros parlamentares também pagam aquele CNPJ pela cota. A página do parlamentar mostra isso em cada par; quando são 5 ou mais, explica que é comum em concessionárias de luz, água e telefone.
+- Metodologia: aviso de que a base da Câmara às vezes registra o CNPJ da prefeitura no lugar do prestador (notas de serviço de hotéis de cidades pequenas emitidas pelo sistema municipal).
+- Decisão do autor do projeto: o cruzamento continua mostrando pares com prefeituras e governos e emendas com valor zero (anuladas). Nada é escondido; só se acrescenta contexto.
