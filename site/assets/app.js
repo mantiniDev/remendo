@@ -423,18 +423,20 @@ pages.apoie = async () => {
   ${tem ? `<div style="display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center">
       <img src="${esc(pix.qr)}" alt="QR Code Pix para apoiar o Remendo" width="240" height="240" style="image-rendering:pixelated;border-radius:8px">
       <p class="sm mu" style="margin:0">Aponte a câmera do app do seu banco. Você escolhe o valor.</p></div>
-    <dl class="dd" style="margin-top:18px"><dt>Chave</dt><dd class="m" style="overflow-wrap:anywhere">${esc(pix.chave)}</dd>
-      <dt>Recebedor</dt><dd>${esc(pix.nome)}</dd></dl>
-    <label class="sm" style="display:block;margin-top:16px">Pix copia e cola
-      <textarea id="cc" readonly rows="5" class="m" style="width:100%;margin-top:6px;font-size:13px;padding:10px;border:2px solid var(--az);border-radius:8px;resize:none">${esc(pix.copia_e_cola)}</textarea></label>
+    <dl class="dd" style="margin-top:18px"><dt>Chave</dt><dd class="m" style="overflow-wrap:anywhere">${esc(pix.chave)}</dd></dl>
+    <p class="sm" style="margin:16px 0 0">Ou use o Pix copia e cola: toque no botão e cole o código no app do banco.</p>
     <button type="button" id="copiar" style="margin-top:10px;font:inherit;font-weight:600;padding:10px 20px;border:0;border-radius:999px;background:var(--az);color:#fff;cursor:pointer">Copiar código Pix</button>
     <span id="ok" class="sm mu" role="status" style="margin-left:10px"></span>`
   : '<p style="margin:0">A chave Pix está sendo criada. Volte em breve.</p>'}
   </div></section></div>`;
   const b = document.getElementById('copiar');
   if (b) b.onclick = async () => {
-    const t = document.getElementById('cc');
-    try { await navigator.clipboard.writeText(t.value); } catch (e) { t.select(); document.execCommand('copy'); }
+    try { await navigator.clipboard.writeText(pix.copia_e_cola); }
+    catch (e) {
+      const t = document.createElement('textarea'); t.value = pix.copia_e_cola; t.setAttribute('readonly', '');
+      t.style.cssText = 'position:fixed;left:-9999px;top:0'; document.body.appendChild(t); t.select();
+      document.execCommand('copy'); t.remove();
+    }
     document.getElementById('ok').textContent = 'Copiado!';
   };
 };

@@ -51,8 +51,8 @@ def main():
     img = qrcode.make(codigo, box_size=12, border=2)
     img.save(os.path.join(RAIZ, "site", "assets", "img", "pix-qr.png"))
     with open(os.path.join(RAIZ, "site", "assets", "pix.json"), "w", encoding="utf-8") as f:
-        json.dump({"chave": a.chave.strip(), "nome": a.nome.strip(), "cidade": a.cidade.strip(),
-                   "copia_e_cola": codigo, "qr": "assets/img/pix-qr.png"}, f, ensure_ascii=False, indent=1)
+        # o nome não vai no json: só aparece dentro do código Pix, no app do banco
+        json.dump({"chave": a.chave.strip(), "copia_e_cola": codigo, "qr": "assets/img/pix-qr.png"}, f, ensure_ascii=False, indent=1)
     print("Pix gerado:", codigo)
 
 
