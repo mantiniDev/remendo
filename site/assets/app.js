@@ -62,7 +62,7 @@ function setAno(a) {
 
 /* ---------- topo e rodapé ---------- */
 const NAV = [['index.html', 'Início', 'home'], ['parlamentares.html', 'Parlamentares', 'parlamentares'], ['emendas.html', 'Emendas', 'emendas'],
-  ['rankings.html', 'Rankings', 'rankings'], ['favorecidos.html', 'Quem recebe', 'favorecidos'], ['cota.html', 'Cota', 'cota'], ['areas.html', 'Áreas', 'areas'], ['partidos.html', 'Partidos', 'partidos'], ['mapa.html', 'Mapa', 'mapa'], ['metodologia.html', 'Metodologia', 'metodologia']];
+  ['rankings.html', 'Rankings', 'rankings'], ['favorecidos.html', 'Quem recebe', 'favorecidos'], ['cota.html', 'Cota', 'cota'], ['areas.html', 'Áreas', 'areas'], ['partidos.html', 'Partidos', 'partidos'], ['mapa.html', 'Mapa', 'mapa'], ['metodologia.html', 'Metodologia', 'metodologia'], ['apoie.html', 'Apoie', 'apoie']];
 function shell(anos, ano, meta) {
   const nav = NAV.map(([h, t, k]) => `<a href="${h}?ano=${ano}"${k === PAGE || (k === 'parlamentares' && PAGE === 'parlamentar') || (k === 'emendas' && PAGE === 'emenda') ? ' aria-current="page"' : ''}>${t}</a>`).join('');
   document.getElementById('top').innerHTML = `<div class="w top"><a class="logo" href="index.html?ano=${ano}" aria-label="Remendo, início">remendo</a>
