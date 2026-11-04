@@ -426,7 +426,7 @@ pages.apoie = async () => {
     <dl class="dd" style="margin-top:18px"><dt>Chave</dt><dd class="m" style="overflow-wrap:anywhere">${esc(pix.chave)}</dd>
       <dt>Recebedor</dt><dd>${esc(pix.nome)}</dd></dl>
     <label class="sm" style="display:block;margin-top:16px">Pix copia e cola
-      <textarea id="cc" readonly rows="3" class="m" style="width:100%;margin-top:6px;font-size:13px;padding:10px;border:2px solid var(--az);border-radius:8px;resize:none">${esc(pix.copia_e_cola)}</textarea></label>
+      <textarea id="cc" readonly rows="5" class="m" style="width:100%;margin-top:6px;font-size:13px;padding:10px;border:2px solid var(--az);border-radius:8px;resize:none">${esc(pix.copia_e_cola)}</textarea></label>
     <button type="button" id="copiar" style="margin-top:10px;font:inherit;font-weight:600;padding:10px 20px;border:0;border-radius:999px;background:var(--az);color:#fff;cursor:pointer">Copiar código Pix</button>
     <span id="ok" class="sm mu" role="status" style="margin-left:10px"></span>`
   : '<p style="margin:0">A chave Pix está sendo criada. Volte em breve.</p>'}
