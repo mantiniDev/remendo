@@ -15,19 +15,39 @@ def _headers():
     return {"chave-api-dados": chave, "Accept": "application/json"}
 
 
-def paginas(caminho, params=None):
-    p = 1
+def paginas(caminho, params=None, estado=None, esperas=()):
+    """Percorre as páginas até vir uma vazia. Um HTTP 400 no meio da lista (o Portal às vezes responde
+    "Erro ao executar a consulta") é tentado de novo; se persistir, a leitura para e `estado["incompleta"]`
+    fica True, para quem chamou não tratar a lista como completa. Um 400 logo depois de uma página menor que a
+    primeira é só o fim dos dados. Sem `esperas` (padrão), um 400 depois da primeira página encerra a leitura,
+    como antes (usado nos documentos, que não justificam esperar)."""
+    p, tam_pagina, ultima = 1, None, None
     while True:
-        try:
-            linhas = get_json(f"{BASE}{caminho}", {**(params or {}), "pagina": p}, _headers(), pausa=PAUSA)
-        except requests.HTTPError as e:
-            if p > 1 and e.response is not None and e.response.status_code == 400:
-                log(f"AVISO: HTTP 400 na página {p} de {caminho} {params}; tratando como fim dos dados. "
-                    f"Resposta: {e.response.text[:300]!r}")
-                return
-            raise
+        for tentativa in range(len(esperas) + 1):
+            try:
+                linhas = get_json(f"{BASE}{caminho}", {**(params or {}), "pagina": p}, _headers(), pausa=PAUSA)
+                break
+            except requests.HTTPError as e:
+                if not (p > 1 and e.response is not None and e.response.status_code == 400):
+                    raise
+                if ultima is not None and ultima < tam_pagina:  # a página anterior já era a última
+                    return
+                if not esperas:
+                    log(f"AVISO: HTTP 400 na página {p} de {caminho} {params}; tratando como fim dos dados. "
+                        f"Resposta: {e.response.text[:300]!r}")
+                    return
+                if tentativa == len(esperas):
+                    log(f"AVISO: HTTP 400 persistente na página {p} de {caminho} {params}; leitura interrompida, "
+                        f"lista incompleta. Resposta: {e.response.text[:300]!r}")
+                    if estado is not None:
+                        estado["incompleta"] = True
+                    return
+                log(f"  HTTP 400 na página {p} de {caminho} {params}; nova tentativa em {esperas[tentativa]} s")
+                time.sleep(esperas[tentativa])
         if not linhas:
             return
+        tam_pagina = tam_pagina or len(linhas)
+        ultima = len(linhas)
         yield from linhas
         p += 1
 
@@ -261,16 +281,15 @@ def run(anos, com_documentos=True, limite=None):
     with Execucao(con, "portal_emendas") as ex:
         for ano in anos:
             alteradas, vistos, iguais, diferentes = 0, {}, 0, 0
-            con.execute("DELETE FROM emendas_duplicadas WHERE ano=?", (ano,))
-            for d in paginas("/emendas", {"ano": ano}):
+            estado, repetidos = {}, []
+            for d in paginas("/emendas", {"ano": ano}, estado, esperas=(10, 30, 60)):
                 cod = str(pick(d, "codigoEmenda", "codigo"))
                 bruto = json.dumps(d, sort_keys=True, ensure_ascii=False)
                 antes = vistos.setdefault(cod, [])
                 chave = cod
                 if antes:  # a API repetiu o código
                     igual = bruto in antes
-                    con.execute("INSERT INTO emendas_duplicadas(codigo,ano,iguais,primeiro,repetido,visto_em) VALUES(?,?,?,?,?,?)",
-                                (cod, ano, int(igual), antes[0], bruto, agora()))
+                    repetidos.append((cod, ano, int(igual), antes[0], bruto, agora()))
                     if igual:  # cópia exata: ignora
                         iguais += 1
                         continue
@@ -279,8 +298,16 @@ def run(anos, com_documentos=True, limite=None):
                 antes.append(bruto)
                 alteradas += upsert_emenda(con, d, chave)
                 ex.n += 1
+            if estado.get("incompleta"):
+                # lista parcial: as emendas lidas foram atualizadas, as demais ficam como estavam,
+                # e o diagnóstico de códigos repetidos do ano é mantido (seria refeito pela metade)
+                log(f"AVISO {ano}: lista INCOMPLETA ({ex.n} lidas no total; {alteradas} novas ou alteradas neste ano); "
+                    "as demais emendas do ano ficam com os dados da carga anterior")
+            else:
+                con.execute("DELETE FROM emendas_duplicadas WHERE ano=?", (ano,))
+                con.executemany("INSERT INTO emendas_duplicadas(codigo,ano,iguais,primeiro,repetido,visto_em) VALUES(?,?,?,?,?,?)", repetidos)
+                log(f"{ano}: lista completa ({ex.n} lidas no total; {alteradas} novas ou alteradas neste ano)")
             con.commit()
-            log(f"{ano}: lista completa ({ex.n} lidas no total; {alteradas} novas ou alteradas neste ano)")
             if iguais or diferentes:
                 log(f"AVISO {ano}: {iguais + diferentes} registros com código repetido "
                     f"({iguais} cópias ignoradas, {diferentes} linhas diferentes guardadas separadas) — veja duplicados.json")
