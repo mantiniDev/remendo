@@ -130,3 +130,13 @@ têm os documentos rebaixados. Para outro servidor, basta um `cron` chamando `py
 - `cruzamento.json` ganha `outros_parlamentares`: quantos outros parlamentares também pagam aquele CNPJ pela cota. A página do parlamentar mostra isso em cada par; quando são 5 ou mais, explica que é comum em concessionárias de luz, água e telefone.
 - Metodologia: aviso de que a base da Câmara às vezes registra o CNPJ da prefeitura no lugar do prestador (notas de serviço de hotéis de cidades pequenas emitidas pelo sistema municipal).
 - Decisão do autor do projeto: o cruzamento continua mostrando pares com prefeituras e governos e emendas com valor zero (anuladas). Nada é escondido; só se acrescenta contexto.
+
+## Atualização 8: página Apoie (Pix)
+- `site/apoie.html`: texto sobre o apoio (só para ajudar a manter o site; sem contrapartida; o Remendo não tem vínculo com partidos ou políticos) e o Pix: QR Code, chave, "copia e cola" e botão de copiar. Enquanto não houver chave, a página diz que ela está sendo criada.
+- Rodapé de todas as páginas: link "Apoie" e a frase "O Remendo é independente e não tem vínculo com partidos ou políticos", com convite para apoiar.
+- Para ativar ou trocar a chave, rode uma vez e faça commit dos dois arquivos gerados:
+
+      pip install "qrcode[pil]"
+      python scripts/pix.py --chave "<chave>" --nome "Nome do recebedor" --cidade "Cidade"
+
+  O script gera o BR Code estático do Banco Central (valor em aberto; conferido com o exemplo do manual do BCB) em `site/assets/pix.json` e o QR Code em `site/assets/img/pix-qr.png`. Prefira chave aleatória ou e-mail dedicado: a página é pública.

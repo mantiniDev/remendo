@@ -71,7 +71,8 @@ function shell(anos, ano, meta) {
   document.getElementById('ysel').onchange = e => setAno(e.target.value);
   const quando = new Date(meta.atualizado_em).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'short' });
   document.getElementById('ftr').innerHTML = `<div class="w"><div class="fr"><span>remendo.com.br · dados abertos, sem partido</span>
-    <span><a href="metodologia.html?ano=${ano}">Metodologia</a> · <a href="dados-abertos.html?ano=${ano}">Dados abertos</a> · <a href="${REPO}/issues/new" rel="noopener">Corrigir um dado</a></span></div>
+    <span><a href="metodologia.html?ano=${ano}">Metodologia</a> · <a href="dados-abertos.html?ano=${ano}">Dados abertos</a> · <a href="${REPO}/issues/new" rel="noopener">Corrigir um dado</a> · <a href="apoie.html?ano=${ano}">Apoie</a></span></div>
+    <p class="sm" style="margin-top:10px">O Remendo é independente e não tem vínculo com partidos ou políticos. ${PAGE === 'apoie' ? '' : `Se quiser ajudar a manter o site no ar, <a href="apoie.html?ano=${ano}">apoie com um Pix</a>.`}</p>
     <p class="m sm" style="margin-top:10px">Atualizado em ${esc(quando)} · Fontes: ${meta.fontes.map(esc).join('; ')}.</p></div>`;
   if (meta.carga_parcial) {
     document.getElementById('aviso').innerHTML = `<div class="w"><div class="banner" role="status"><b>Carga em andamento.</b> Ainda faltam os documentos de ${nf0.format(meta.emendas_sem_documentos)} emendas: as datas e a situação “parada” podem estar incompletas. Os valores já estão completos.</div></div>`;
@@ -410,6 +411,32 @@ pages.cota = async ({ ano }) => {
     { label: 'Parlamentares', html: f => nf0.format(f.parlamentares), val: f => f.parlamentares, num: true },
     { label: 'Documentos', html: f => nf0.format(f.n), val: f => f.n, num: true },
     { label: 'Valor', html: f => money(f.valor), val: f => f.valor, num: true }], C.fornecedores, { sort: 3, size: 30 });
+};
+pages.apoie = async () => {
+  const pix = await fetch('assets/pix.json', { cache: 'no-cache' }).then(r => (r.ok ? r.json() : {})).catch(() => ({}));
+  const tem = !!(pix && pix.chave && pix.copia_e_cola);
+  app.innerHTML = `<div class="w prose"><h1 style="font-size:clamp(30px,5vw,48px)">Apoie o Remendo</h1>
+  <p class="lede">O Remendo é um projeto independente, feito por iniciativa própria e mantido sem patrocínio.</p>
+  <p>O apoio é apenas uma ajuda para manter a página no ar: domínio, hospedagem e o tempo de atualizar os dados todos os dias. Quem quiser apoiar pode contribuir com qualquer valor, quando quiser. Não há contrapartida, e o site continua aberto e gratuito para todos.</p>
+  <p><b>O Remendo não tem vínculo com partidos ou políticos.</b></p>
+  <section><h2>Pix</h2><div class="p" style="max-width:520px">
+  ${tem ? `<div style="display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center">
+      <img src="${esc(pix.qr)}" alt="QR Code Pix para apoiar o Remendo" width="240" height="240" style="image-rendering:pixelated;border-radius:8px">
+      <p class="sm mu" style="margin:0">Aponte a câmera do app do seu banco. Você escolhe o valor.</p></div>
+    <dl class="dd" style="margin-top:18px"><dt>Chave</dt><dd class="m" style="overflow-wrap:anywhere">${esc(pix.chave)}</dd>
+      <dt>Recebedor</dt><dd>${esc(pix.nome)}</dd></dl>
+    <label class="sm" style="display:block;margin-top:16px">Pix copia e cola
+      <textarea id="cc" readonly rows="3" class="m" style="width:100%;margin-top:6px;font-size:13px;padding:10px;border:2px solid var(--az);border-radius:8px;resize:none">${esc(pix.copia_e_cola)}</textarea></label>
+    <button type="button" id="copiar" style="margin-top:10px;font:inherit;font-weight:600;padding:10px 20px;border:0;border-radius:999px;background:var(--az);color:#fff;cursor:pointer">Copiar código Pix</button>
+    <span id="ok" class="sm mu" role="status" style="margin-left:10px"></span>`
+  : '<p style="margin:0">A chave Pix está sendo criada. Volte em breve.</p>'}
+  </div></section></div>`;
+  const b = document.getElementById('copiar');
+  if (b) b.onclick = async () => {
+    const t = document.getElementById('cc');
+    try { await navigator.clipboard.writeText(t.value); } catch (e) { t.select(); document.execCommand('copy'); }
+    document.getElementById('ok').textContent = 'Copiado!';
+  };
 };
 pages.areas = async ({ ano }) => {
   const A = (await J('areas.json')).filter(a => a.ano === ano).sort((a, b) => b.empenhado - a.empenhado); const max = Math.max(...A.map(a => a.empenhado), 1);
