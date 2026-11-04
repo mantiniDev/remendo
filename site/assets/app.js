@@ -61,17 +61,20 @@ function setAno(a) {
 }
 
 /* ---------- topo e rodapé ---------- */
+const INSTAGRAM = 'https://www.instagram.com/remendo.br/';
+const IG_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4.2"/><circle cx="17.4" cy="6.6" r="1.1" fill="currentColor" stroke="none"/></svg>';
 const NAV = [['index.html', 'Início', 'home'], ['parlamentares.html', 'Parlamentares', 'parlamentares'], ['emendas.html', 'Emendas', 'emendas'],
   ['rankings.html', 'Rankings', 'rankings'], ['favorecidos.html', 'Quem recebe', 'favorecidos'], ['cota.html', 'Cota', 'cota'], ['areas.html', 'Áreas', 'areas'], ['partidos.html', 'Partidos', 'partidos'], ['mapa.html', 'Mapa', 'mapa'], ['metodologia.html', 'Metodologia', 'metodologia'], ['apoie.html', 'Apoie', 'apoie']];
 function shell(anos, ano, meta) {
   const nav = NAV.map(([h, t, k]) => `<a href="${h}?ano=${ano}"${k === PAGE || (k === 'parlamentares' && PAGE === 'parlamentar') || (k === 'emendas' && PAGE === 'emenda') ? ' aria-current="page"' : ''}>${t}</a>`).join('');
   document.getElementById('top').innerHTML = `<div class="w top"><a class="logo" href="index.html?ano=${ano}" aria-label="Remendo, início">remendo</a>
     <nav class="nv" aria-label="Principal">${nav}</nav>
+    <a class="ig" href="${INSTAGRAM}" target="_blank" rel="noopener" aria-label="Remendo no Instagram (@remendo.br)" title="@remendo.br no Instagram">${IG_ICON}</a>
     <label class="ys">Ano <select id="ysel">${anos.map(a => `<option${a === ano ? ' selected' : ''}>${a}</option>`).join('')}</select></label></div>`;
   document.getElementById('ysel').onchange = e => setAno(e.target.value);
   const quando = new Date(meta.atualizado_em).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'short' });
   document.getElementById('ftr').innerHTML = `<div class="w"><div class="fr"><span>remendo.com.br · dados abertos, sem partido</span>
-    <span><a href="metodologia.html?ano=${ano}">Metodologia</a> · <a href="dados-abertos.html?ano=${ano}">Dados abertos</a> · <a href="${REPO}/issues/new" rel="noopener">Corrigir um dado</a> · <a href="apoie.html?ano=${ano}">Apoie</a></span></div>
+    <span><a href="metodologia.html?ano=${ano}">Metodologia</a> · <a href="dados-abertos.html?ano=${ano}">Dados abertos</a> · <a href="${REPO}/issues/new" rel="noopener">Corrigir um dado</a> · <a href="apoie.html?ano=${ano}">Apoie</a> · <a class="igr" href="${INSTAGRAM}" target="_blank" rel="noopener">${IG_ICON}<span>@remendo.br</span></a></span></div>
     <p class="sm" style="margin-top:10px">O Remendo é independente e não tem vínculo com partidos ou políticos. ${PAGE === 'apoie' ? '' : `Se quiser ajudar a manter o site no ar, <a href="apoie.html?ano=${ano}">apoie com um Pix</a>.`}</p>
     <p class="m sm" style="margin-top:10px">Atualizado em ${esc(quando)} · Fontes: ${meta.fontes.map(esc).join('; ')}.</p></div>`;
   if (meta.carga_parcial) {
